@@ -1,0 +1,66 @@
+from django.db import models
+
+class SiteSettings(models.Model):
+    site_name       = models.CharField(max_length=100, default='Gooprep')
+    tagline         = models.CharField(max_length=200, default='Learn Without Limits')
+    logo            = models.ImageField(upload_to='site/', blank=True, null=True)
+    logo_url        = models.URLField(blank=True)
+    favicon         = models.ImageField(upload_to='site/', blank=True, null=True)
+    support_email   = models.EmailField(default='support@gooprep.com')
+    phone           = models.CharField(max_length=30, blank=True)
+    address         = models.TextField(blank=True)
+    currency        = models.CharField(max_length=3, default='GHS')
+    timezone        = models.CharField(max_length=50, default='Africa/Accra')
+    # Colors
+    primary_color   = models.CharField(max_length=7, default='#e63900')
+    secondary_color = models.CharField(max_length=7, default='#f5a800')
+    header_bg       = models.CharField(max_length=7, default='#111111')
+    footer_bg       = models.CharField(max_length=7, default='#111111')
+    link_color      = models.CharField(max_length=7, default='#e63900')
+    button_color    = models.CharField(max_length=7, default='#e63900')
+    # Social media
+    facebook_url    = models.URLField(blank=True)
+    twitter_url     = models.URLField(blank=True)
+    instagram_url   = models.URLField(blank=True)
+    linkedin_url    = models.URLField(blank=True)
+    youtube_url     = models.URLField(blank=True)
+    tiktok_url      = models.URLField(blank=True)
+    whatsapp_number = models.CharField(max_length=30, blank=True)
+    # External APIs
+    paystack_public_key  = models.CharField(max_length=200, blank=True)
+    paystack_secret_key  = models.CharField(max_length=200, blank=True)
+    whatsapp_api_token   = models.CharField(max_length=200, blank=True)
+    whatsapp_phone_id    = models.CharField(max_length=100, blank=True)
+    google_maps_api_key  = models.CharField(max_length=200, blank=True)
+    cloudflare_account_id = models.CharField(max_length=200, blank=True)
+    cloudflare_access_key = models.CharField(max_length=200, blank=True)
+    cloudflare_secret_key = models.CharField(max_length=200, blank=True)
+    cloudflare_bucket    = models.CharField(max_length=100, blank=True)
+    openai_api_key       = models.CharField(max_length=200, blank=True)
+    guppy_app_id         = models.CharField(max_length=200, blank=True)
+    guppy_api_key        = models.CharField(max_length=200, blank=True)
+    guppy_webhook_secret = models.CharField(max_length=200, blank=True)
+    bbb_url              = models.URLField(blank=True)
+    bbb_secret           = models.CharField(max_length=200, blank=True)
+    # Financial
+    commission_rate     = models.DecimalField(max_digits=4, decimal_places=2, default=15)
+    min_payout          = models.DecimalField(max_digits=8, decimal_places=2, default=50)
+    escrow_release_hours = models.IntegerField(default=24)
+    cancellation_hours  = models.IntegerField(default=24)
+    # Feature flags
+    ai_enabled           = models.BooleanField(default=True)
+    whatsapp_enabled     = models.BooleanField(default=True)
+    group_classes_enabled = models.BooleanField(default=True)
+    institutions_enabled  = models.BooleanField(default=True)
+    trials_enabled        = models.BooleanField(default=True)
+    gamification_enabled  = models.BooleanField(default=True)
+    guppy_enabled         = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+    class Meta: verbose_name = 'Site Settings'; verbose_name_plural = 'Site Settings'
+
+class StaticPage(models.Model):
+    TYPES = [('privacy','Privacy Policy'),('terms','Terms of Service'),('about','About Us'),('faq','FAQ'),('how_it_works','How It Works'),('ip_policy','IP Policy'),('cookie','Cookie Policy'),('refund','Refund Policy')]
+    page_type  = models.CharField(max_length=20, choices=TYPES, unique=True)
+    title      = models.CharField(max_length=200)
+    content    = models.TextField()
+    updated_at = models.DateTimeField(auto_now=True)

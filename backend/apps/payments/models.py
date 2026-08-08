@@ -21,6 +21,25 @@ class Transaction(models.Model):
     @property
     def payer_name(self): return self.payer.get_full_name()
 
+class Subscription(models.Model):
+    PLANS = [('pro', 'Pro'), ('institution', 'Institution')]
+    CYCLES = [('monthly', 'Monthly'), ('annual', 'Annual')]
+    STATUSES = [('pending', 'Pending'), ('active', 'Active'), ('failed', 'Failed'), ('cancelled', 'Cancelled')]
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='subscriptions')
+    plan = models.CharField(max_length=20, choices=PLANS)
+    billing_cycle = models.CharField(max_length=10, choices=CYCLES, default='monthly')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    status = models.CharField(max_length=20, choices=STATUSES, default='pending')
+    paystack_ref = models.CharField(max_length=200, blank=True, null=True, unique=True)
+    starts_at = models.DateTimeField(blank=True, null=True)
+    expires_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+
 class Payout(models.Model):
     tutor        = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='payouts')
     amount       = models.DecimalField(max_digits=10, decimal_places=2)

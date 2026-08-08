@@ -3,7 +3,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.http import HttpResponse
-from django.db.models import Q, Sum, Count, Avg
+from django.db.models import Q, Sum
 from django.utils import timezone
 from datetime import timedelta, date
 import logging
@@ -379,12 +379,13 @@ class AdminBBBView(APIView):
             version  = bbb.get_api_version()
 
         from apps.scheduling.models import Lesson, BBBWebhookEvent
-        active_rooms = Lesson.objects.filter(status='in_progress').select_related('tutor_profile', 'student__profile', 'institution')
+        active_rooms = Lesson.objects.filter(status='in_progress').select_related('tutor', 'student', 'subject')
         recent_events = BBBWebhookEvent.objects.order_by('-received_at')[:20]
 
         return Response({
             'server': {
                 'healthy': healthy,
+                'configured': bbb.configured,
                 'url': bbb.base_url,
                 'version': version.get('version', ''),
             },
@@ -392,10 +393,9 @@ class AdminBBBView(APIView):
             'active_lesson_rooms': [{
                 'lesson_id': str(l.id),
                 'meeting_id': l.bbb_meeting_id,
-                'tutor_profile': l.tutor.user.full_name,
-                'student_profile': l.student.user.full_name,
-                'institution': l.institution.name if l.institution else '',
-                'started_at': l.bbb_started_at.isoformat() if l.bbb_started_at else None,
+                'tutor_name': l.tutor.get_full_name(),
+                'student_name': l.student.get_full_name(),
+                'subject': l.subject_name,
                 'recording': l.record_session,
             } for l in active_rooms],
             'recent_webhook_events': [{
@@ -412,11 +412,11 @@ class AdminBBBView(APIView):
         lesson_id = request.data.get('lesson_id')
         try:
             lesson = Lesson.objects.get(pk=lesson_id)
-            bbb.end_meeting(lesson.bbb_meeting_id, lesson.bbb_moderator_pw)
+            if not lesson.bbb_meeting_id:
+                return Response({'error': 'Lesson has no BBB meeting.'}, status=400)
+            bbb.end_meeting(lesson.bbb_meeting_id, request.data.get('moderator_password', ''))
             lesson.status = 'completed'
-            lesson.bbb_room_ended = True
-            lesson.bbb_ended_at = timezone.now()
-            lesson.save(update_fields=['status', 'bbb_room_ended', 'bbb_ended_at'])
+            lesson.save(update_fields=['status'])
             return Response({'message': f'Lesson {lesson_id} ended by admin.'})
         except Lesson.DoesNotExist:
             return Response({'error': 'Lesson not found.'}, status=404)

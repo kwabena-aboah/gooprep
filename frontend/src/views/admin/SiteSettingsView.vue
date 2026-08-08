@@ -92,7 +92,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { apiGet, apiPost, apiPatch } from '@/utils/api'
+import { apiGet, apiPost } from '@/utils/api'
 import { useNotifStore } from '@/stores/notifs'
 import GpSpinner from '@/components/common/GpSpinner.vue'
 

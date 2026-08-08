@@ -1,5 +1,5 @@
 import json
-from rest_framework import permissions, status
+from rest_framework import permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -64,7 +64,7 @@ class MessageListView(APIView):
         conv.save(update_fields=['last_message','last_message_at'])
         # Notify other participants
         for participant in conv.participants.exclude(id=request.user.id):
-            from accounts.models import Notification
+            from apps.accounts.models import Notification
             Notification.objects.create(user=participant, notification_type='message_received',
                 title=f'New message from {request.user.get_full_name()}', message=content[:100], link='/messages')
         return Response(MessageSerializer(msg).data, status=201)
@@ -72,7 +72,7 @@ class MessageListView(APIView):
 class GuppyWebhookView(APIView):
     permission_classes = [permissions.AllowAny]
     def post(self, request):
-        sig = request.headers.get('X-Guppy-Signature','')
+        sig = request.headers.get('X-Guppy-Signature', '') or request.headers.get('X-GUPPY-SIGNATURE', '')
         if not verify_webhook(request.body, sig):
             return Response({'error':'Invalid signature.'}, status=403)
         try:
@@ -81,9 +81,9 @@ class GuppyWebhookView(APIView):
             data       = event.get('data', {})
             if event_type == 'message.received':
                 self._handle_message(data)
-        except json.JSONDecodeError:
-            return Response({'error':'Invalid JSON.'}, status=400)
-        return Response({'received':True})
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return Response({'error': 'Invalid JSON.'}, status=400)
+        return Response({'received': True})
 
     def _handle_message(self, data):
         try:
@@ -98,7 +98,7 @@ class GuppyWebhookView(APIView):
             conv.last_message=content[:200]; conv.last_message_at=timezone.now()
             conv.save(update_fields=['last_message','last_message_at'])
             for p in conv.participants.exclude(id=sender.id):
-                from accounts.models import Notification
+                from apps.accounts.models import Notification
                 Notification.objects.create(user=p,notification_type='message_received',
                     title=f'New message from {sender.get_full_name()}',message=content[:100],link='/messages')
         except Exception as e:

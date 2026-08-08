@@ -25,6 +25,7 @@ const routes=[
   {path:'/notifications',name:'notifications',component: () => import('@/views/auth/NotificationsView.vue'),meta:{auth:true}},
   {path:'/messages',name:'messages',component: () => import('@/views/messaging/MessagesView.vue'),meta:{auth:true}},
   {path:'/payments',name:'payments',component: () => import('@/views/payments/PaymentsView.vue'),meta:{auth:true}},
+  {path:'/payments/verify',name:'payment-verify',component: () => import('@/views/payments/PaymentVerificationView.vue')},
   {path:'/achievements',name:'achievements',component: () => import('@/views/dashboard/AchievementsView.vue'),meta:{auth:true}},
   {path:'/lessons',name:'lessons',component: () => import('@/views/scheduling/LessonsView.vue'),meta:{auth:true}},
   {path:'/lessons/:id/join',name:'lesson-join',component: () => import('@/views/scheduling/LessonRoomView.vue'),meta:{auth:true}},

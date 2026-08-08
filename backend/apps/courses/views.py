@@ -1,4 +1,4 @@
-from rest_framework import permissions, status
+from rest_framework import permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -35,7 +35,7 @@ class GroupClassListView(APIView):
         """Tutors create group classes."""
         if request.user.role not in ('tutor', 'admin'):
             return Response({'error': 'Only tutors can create group classes.'}, status=403)
-        from tutors.models import Subject
+        from apps.tutors.models import Subject
         from django.utils.dateparse import parse_datetime
         gc = GroupClass.objects.create(
             tutor=request.user,
@@ -65,7 +65,7 @@ def enroll_class(request, pk):
     if not created:
         return Response({'error': 'Already enrolled.'}, status=400)
     try:
-        from messaging.guppy import get_or_create_guppy_user, send_push_notification
+        from apps.messaging.guppy import get_or_create_guppy_user, send_push_notification
         tutor_gid = get_or_create_guppy_user(gc.tutor)
         if tutor_gid:
             send_push_notification(

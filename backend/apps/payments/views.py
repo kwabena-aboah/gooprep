@@ -1,11 +1,14 @@
-import hmac, hashlib, json
-from rest_framework import permissions, status
+import hmac, hashlib, json, uuid
+from rest_framework import permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.conf import settings
-from .models import Transaction, Payout, Dispute
-from .serializers import TransactionSerializer, PayoutSerializer, DisputeSerializer
+from django.utils import timezone
+from datetime import timedelta
+from .models import Transaction, Subscription, Payout, Dispute
+from . import paystack
+from .serializers import TransactionSerializer, SubscriptionSerializer, PayoutSerializer, DisputeSerializer
 
 class TransactionListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -23,7 +26,7 @@ class PayoutListView(APIView):
         qs = Payout.objects.filter(tutor=request.user).order_by('-requested_at')
         return Response({'count':qs.count(),'results':PayoutSerializer(qs,many=True).data})
     def post(self, request):
-        from tutors.models import TutorProfile
+        from apps.tutors.models import TutorProfile
         try: tp = TutorProfile.objects.get(user=request.user)
         except: return Response({'error':'Tutor profile not found.'}, status=400)
         amount = float(request.data.get('amount',0))
@@ -36,7 +39,7 @@ class PayoutListView(APIView):
         tp.pending_payout = float(tp.pending_payout) - amount
         tp.save(update_fields=['pending_payout'])
         try:
-            from messaging.guppy import get_or_create_guppy_user, send_push_notification
+            from apps.messaging.guppy import get_or_create_guppy_user, send_push_notification
             gid = get_or_create_guppy_user(request.user)
             if gid: send_push_notification(gid,'💸 Payout Requested',f'GHS {amount:.2f} payout submitted. Processing in 1-2 business days.')
         except Exception: pass
@@ -49,7 +52,7 @@ class DisputeListView(APIView):
         qs = Dispute.objects.filter(Q(filed_by=request.user)|Q(lesson__tutor=request.user)|Q(lesson__student=request.user))
         return Response({'count':qs.count(),'results':DisputeSerializer(qs,many=True).data})
     def post(self, request):
-        from scheduling.models import Lesson
+        from apps.scheduling.models import Lesson
         try: lesson = Lesson.objects.get(id=request.data.get('lesson'))
         except: return Response({'error':'Lesson not found.'}, status=400)
         d = Dispute.objects.create(lesson=lesson, filed_by=request.user,
@@ -59,62 +62,157 @@ class DisputeListView(APIView):
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 def paystack_webhook(request):
-    sig    = request.headers.get('x-paystack-signature','')
+    signature = request.headers.get('x-paystack-signature', '')
     secret = settings.PAYSTACK_SECRET_KEY
     if secret:
         expected = hmac.new(secret.encode(), request.body, hashlib.sha512).hexdigest()
-        if not hmac.compare_digest(expected, sig):
-            return Response({'error':'Invalid signature.'}, status=403)
+        if not hmac.compare_digest(expected, signature):
+            return Response({'error': 'Invalid signature.'}, status=403)
     try:
         event = json.loads(request.body)
-        if event.get('event') == 'charge.success':
-            ref = event['data'].get('reference','')
-            try:
-                txn = Transaction.objects.get(paystack_ref=ref)
-                txn.status = 'success'; txn.save(update_fields=['status'])
-                if txn.lesson:
-                    txn.lesson.payment_status = 'paid'; txn.lesson.save(update_fields=['payment_status'])
-                    from tutors.models import TutorProfile
-                    try:
-                        tp = TutorProfile.objects.get(user=txn.lesson.tutor)
-                        net = txn.amount * (1 - settings.PLATFORM_COMMISSION)
-                        tp.pending_payout += net; tp.total_earnings += net
-                        tp.save(update_fields=['pending_payout','total_earnings'])
-                    except: pass
-                    try:
-                        from messaging.guppy import notify_payment_received
-                        notify_payment_received(txn)
-                    except: pass
-            except Transaction.DoesNotExist: pass
-    except Exception: pass
-    return Response({'received':True})
+        event_name = event.get('event')
+        data = event.get('data', {})
+        reference = data.get('reference', '')
+        if event_name == 'charge.success':
+            _settle_successful_reference(reference)
+        elif event_name in ('transfer.success', 'transfer.failed', 'transfer.reversed'):
+            payout = Payout.objects.filter(details__reference=reference).first()
+            if payout:
+                payout.status = 'completed' if event_name == 'transfer.success' else 'failed'
+                payout.processed_at = timezone.now()
+                payout.save(update_fields=['status', 'processed_at'])
+                if payout.status == 'failed':
+                    from apps.tutors.models import TutorProfile
+                    tp = TutorProfile.objects.filter(user=payout.tutor).first()
+                    if tp:
+                        tp.pending_payout += payout.amount
+                        tp.save(update_fields=['pending_payout'])
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return Response({'error': 'Invalid webhook payload.'}, status=400)
+    return Response({'received': True})
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def initiate_payment(request):
-    """Initiate Paystack payment and return authorization URL."""
-    import httpx, uuid
+    """Create a pending lesson transaction and initialize Paystack."""
     lesson_id = request.data.get('lesson_id')
-    method    = request.data.get('payment_method','card')
-    from scheduling.models import Lesson
-    try: lesson = Lesson.objects.get(id=lesson_id, student=request.user)
-    except: return Response({'error':'Lesson not found.'}, status=404)
-    ref = f'gooprep-{uuid.uuid4().hex[:16]}'
-    txn = Transaction.objects.create(payer=request.user, lesson=lesson,
-        amount=lesson.price, payment_method=method, paystack_ref=ref,
-        description=f'Lesson with {lesson.tutor.get_full_name()}')
-    secret = settings.PAYSTACK_SECRET_KEY
-    if not secret:
-        return Response({'error':'Paystack not configured.','ref':ref}, status=503)
+    method = request.data.get('payment_method', 'card')
+    if method not in {'card', 'mtn_momo', 'at_momo', 'tel_cash', 'bank'}:
+        return Response({'error': 'Unsupported payment method.'}, status=400)
+    from apps.scheduling.models import Lesson
     try:
-        r = httpx.post('https://api.paystack.co/transaction/initialize',
-            headers={'Authorization':f'Bearer {secret}','Content-Type':'application/json'},
-            json={'email':request.user.email,'amount':int(float(lesson.price)*100),
-                  'reference':ref,'callback_url':f'{settings.FRONTEND_URL}/payments/verify'},
-            timeout=10)
-        data = r.json()
-        if data.get('status'):
-            return Response({'authorization_url':data['data']['authorization_url'],'reference':ref})
-        return Response({'error':data.get('message','Payment initiation failed.')}, status=400)
-    except Exception as e:
-        return Response({'error':str(e)}, status=500)
+        lesson = Lesson.objects.get(id=lesson_id, student=request.user)
+    except Lesson.DoesNotExist:
+        return Response({'error': 'Lesson not found.'}, status=404)
+    if lesson.payment_status == 'paid':
+        return Response({'error': 'This lesson has already been paid for.'}, status=400)
+
+    reference = f'gooprep-{uuid.uuid4().hex[:16]}'
+    txn = Transaction.objects.create(
+        payer=request.user, lesson=lesson, amount=lesson.price,
+        payment_method=method, paystack_ref=reference,
+        description=f'Lesson with {lesson.tutor.get_full_name()}',
+    )
+    try:
+        data = paystack.initialize(
+            request.user.email, lesson.price, reference,
+            f'{settings.FRONTEND_URL}/payments/verify',
+            {'type': 'lesson', 'lesson_id': lesson.id},
+        )
+    except Exception as exc:
+        txn.status = 'failed'
+        txn.save(update_fields=['status'])
+        return Response({'error': str(exc)}, status=502)
+    return Response({'authorization_url': data['authorization_url'], 'reference': reference})
+
+PLAN_PRICES = {
+    'pro': {'monthly': 89, 'annual': 71},
+    'institution': {'monthly': 499, 'annual': 399},
+}
+
+
+class SubscriptionView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        subscription = Subscription.objects.filter(user=request.user, status='active').first()
+        return Response({'subscription': SubscriptionSerializer(subscription).data if subscription else None})
+
+    def post(self, request):
+        plan = request.data.get('plan', '').lower()
+        cycle = request.data.get('billing_cycle', 'monthly')
+        if plan not in PLAN_PRICES or cycle not in ('monthly', 'annual'):
+            return Response({'error': 'Invalid subscription plan or billing cycle.'}, status=400)
+        amount = PLAN_PRICES[plan][cycle]
+        ref = f'gooprep-sub-{request.user.id}-{uuid.uuid4().hex[:12]}'
+        subscription = Subscription.objects.create(user=request.user, plan=plan, billing_cycle=cycle, amount=amount, paystack_ref=ref)
+        try:
+            data = paystack.initialize(request.user.email, amount, ref, f'{settings.FRONTEND_URL}/payments/verify', {'type': 'subscription', 'subscription_id': subscription.id})
+        except Exception as exc:
+            subscription.status = 'failed'; subscription.save(update_fields=['status'])
+            return Response({'error': str(exc)}, status=502)
+        return Response({'authorization_url': data['authorization_url'], 'reference': ref}, status=201)
+
+
+class SubscriptionStatusView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        subscription = Subscription.objects.filter(user=request.user).order_by('-created_at').first()
+        return Response({'subscription': SubscriptionSerializer(subscription).data if subscription else None})
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def verify_payment(request):
+    reference = request.query_params.get('reference')
+    if not reference:
+        return Response({'error': 'Payment reference is required.'}, status=400)
+    try:
+        result = paystack.verify(reference)
+    except Exception as exc:
+        return Response({'error': str(exc)}, status=502)
+    if result.get('status') != 'success':
+        return Response({'paid': False, 'message': 'Payment was not completed.'})
+    _settle_successful_reference(reference)
+    return Response({'paid': True, 'message': 'Payment confirmed successfully.'})
+
+
+def _settle_successful_reference(reference):
+    txn = Transaction.objects.filter(paystack_ref=reference).select_related('lesson').first()
+    if txn and txn.status != 'success':
+        txn.status = 'success'; txn.save(update_fields=['status'])
+        if txn.lesson and txn.lesson.payment_status != 'paid':
+            txn.lesson.payment_status = 'paid'; txn.lesson.save(update_fields=['payment_status'])
+            from apps.tutors.models import TutorProfile
+            tp = TutorProfile.objects.filter(user=txn.lesson.tutor).first()
+            if tp:
+                net = txn.amount * (1 - settings.PLATFORM_COMMISSION)
+                tp.pending_payout += net; tp.total_earnings += net
+                tp.save(update_fields=['pending_payout', 'total_earnings'])
+    subscription = Subscription.objects.filter(paystack_ref=reference).first()
+    if subscription and subscription.status != 'active':
+        now = timezone.now()
+        subscription.status = 'active'; subscription.starts_at = now
+        subscription.expires_at = now + timedelta(days=365 if subscription.billing_cycle == 'annual' else 30)
+        subscription.save(update_fields=['status', 'starts_at', 'expires_at'])
+        user = subscription.user; user.subscription_plan = subscription.plan; user.subscription_expires = subscription.expires_at
+        user.save(update_fields=['subscription_plan', 'subscription_expires'])
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAdminUser])
+def process_payout(request, pk):
+    payout = Payout.objects.select_related('tutor').filter(pk=pk, status='pending').first()
+    if not payout:
+        return Response({'error': 'Pending payout not found.'}, status=404)
+    details = payout.details or {}
+    try:
+        recipient = paystack.create_transfer_recipient(payout.tutor.get_full_name(), details['number'], details.get('bank_code', '057'))
+        reference = f'gooprep-payout-{payout.id}-{uuid.uuid4().hex[:8]}'
+        transfer = paystack.create_transfer(payout.amount, recipient, reference, f'Gooprep payout #{payout.id}')
+    except (KeyError, ValueError) as exc:
+        return Response({'error': str(exc)}, status=400)
+    payout.status = 'processing'; payout.details = {**details, 'recipient_code': recipient, 'transfer_code': transfer.get('transfer_code'), 'reference': reference}
+    payout.save(update_fields=['status', 'details'])
+    return Response(PayoutSerializer(payout).data)

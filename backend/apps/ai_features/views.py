@@ -46,7 +46,7 @@ def clear_ai_chat(request):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def student_progress(request):
-    from tutors.models import Subject
+    from apps.tutors.models import Subject
     progress = StudentProgress.objects.filter(student=request.user).select_related('subject')
     data = [{'subject_id':p.subject_id,'subject_name':p.subject.name,
               'score_before':p.score_before,'score_after':p.score_after,

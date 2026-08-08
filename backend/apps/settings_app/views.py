@@ -1,4 +1,4 @@
-from rest_framework import permissions, status
+from rest_framework import permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from .models import SiteSettings, StaticPage

@@ -1,5 +1,5 @@
 import hashlib
-from rest_framework import permissions, status
+from rest_framework import permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -56,7 +56,7 @@ class LessonListView(APIView):
                 start_time=start, end_time=end, duration_minutes=duration,
                 price=request.data.get('price',0), currency=request.data.get('currency','GHS'),
                 record_session=request.data.get('record_session',True),
-                topic=request.data.get('topic',''), status='confirmed', payment_status='paid',
+                topic=request.data.get('topic',''), status='confirmed', payment_status='pending',
                 booked_on_behalf=request.data.get('booked_on_behalf',False),
                 booker_name=request.data.get('booker_name',''),
                 booker_relationship=request.data.get('booker_relationship',''),
@@ -98,8 +98,8 @@ def join_lesson(request, pk):
             return Response({'error':'Not your lesson.'}, status=403)
         bbb_url    = dj_settings.BBB_URL
         bbb_secret = dj_settings.BBB_SECRET
-        if not bbb_url:
-            return Response({'join_url':None,'error':'Virtual classroom not configured. Contact admin.'})
+        if not bbb_url or not bbb_secret:
+            return Response({'join_url': None, 'error': 'Virtual classroom not configured. Contact admin.'}, status=503)
         meeting_id = l.bbb_meeting_id or f'gooprep-lesson-{l.id}'
         is_mod     = request.user == l.tutor
         pw         = hashlib.sha1(f'{meeting_id}-{"mod" if is_mod else "att"}{bbb_secret}'.encode()).hexdigest()[:8]
@@ -109,7 +109,7 @@ def join_lesson(request, pk):
         if l.status == 'confirmed':
             l.status = 'in_progress'; l.bbb_meeting_id = meeting_id
             l.save(update_fields=['status','bbb_meeting_id'])
-        return Response({'join_url':join_url,'meeting_id':meeting_id})
+        return Response({'join_url': join_url, 'meeting_id': meeting_id})
     except Lesson.DoesNotExist:
         return Response({'error':'Not found.'}, status=404)
 
@@ -122,7 +122,7 @@ def end_lesson(request, pk):
             return Response({'error':'Only the tutor can end the lesson.'}, status=403)
         l.status = 'completed'; l.save(update_fields=['status'])
         try:
-            from scheduling.tasks import generate_ai_summary
+            from apps.scheduling.tasks import generate_ai_summary
             generate_ai_summary.delay(l.id)
         except Exception: pass
         return Response({'ended':True})

@@ -21,7 +21,7 @@ class TutorProfileAdmin(admin.ModelAdmin):
         queryset.update(approval_status='approved')
         for tp in queryset:
             try:
-                from messaging.guppy import notify_tutor_approved
+                from apps.messaging.guppy import notify_tutor_approved
                 notify_tutor_approved(tp.user, True)
             except Exception: pass
 

@@ -6,9 +6,7 @@ import hashlib
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
-import uuid
 import logging
-from datetime import datetime, timedelta
 from django.conf import settings
 from django.utils import timezone
 
@@ -22,8 +20,12 @@ class BBBService:
     """
 
     def __init__(self):
-        self.base_url = getattr(settings, 'BBB_URL', 'https://your-bbb-server.com/bigbluebutton/api/')
-        self.secret = getattr(settings, 'BBB_SECRET', 'your-bbb-secret')
+        self.base_url = (getattr(settings, 'BBB_URL', '') or '').rstrip('/') + '/'
+        self.secret = getattr(settings, 'BBB_SECRET', '') or ''
+
+    @property
+    def configured(self):
+        return bool(self.base_url and self.secret)
 
     # ------------------------------------------------------------------ #
     #  Core checksum / URL helpers                                         #
@@ -42,6 +44,8 @@ class BBBService:
 
     def _call_api(self, api_call: str, params: dict) -> dict:
         """Execute a BBB API call and return parsed XML as dict."""
+        if not self.configured:
+            return {'returncode': 'FAILED', 'message': 'BBB is not configured.'}
         url = self._build_url(api_call, params)
         try:
             with urllib.request.urlopen(url, timeout=15) as resp:
@@ -256,78 +260,45 @@ class BBBService:
     # ------------------------------------------------------------------ #
 
     def provision_lesson_room(self, lesson) -> dict:
-        """
-        Create (or verify) a BBB room for a scheduled lesson.
-        Returns {meeting_id, attendee_pw, moderator_pw, join_url_tutor, join_url_student}
-        """
-        from apps.settings_app.models import SiteSettings
-        try:
-            site = SiteSettings.objects.first()
-            logo = site.logo.url if site and site.logo else ''
-        except Exception:
-            logo = ''
+        """Create a BBB room and signed join URLs for a lesson."""
+        if not self.configured:
+            raise RuntimeError('BigBlueButton is not configured.')
 
-        meeting_id = f"lesson-{lesson.id}"
-        attendee_pw = hashlib.md5(f"att-{lesson.id}".encode()).hexdigest()[:12]
-        moderator_pw = hashlib.md5(f"mod-{lesson.id}".encode()).hexdigest()[:12]
-
-        duration = int((lesson.end_time - lesson.start_time).total_seconds() / 60)
-
+        logo = getattr(settings, 'BBB_LOGO_URL', '')
+        meeting_id = f'lesson-{lesson.id}'
+        attendee_pw = hashlib.md5(f'att-{lesson.id}'.encode()).hexdigest()[:12]
+        moderator_pw = hashlib.md5(f'mod-{lesson.id}'.encode()).hexdigest()[:12]
+        duration = max(1, int((lesson.end_time - lesson.start_time).total_seconds() / 60))
+        subject_name = lesson.subject.name if lesson.subject else 'Tutoring Session'
+        tutor_name = lesson.tutor.get_full_name() or lesson.tutor.email
+        student_name = lesson.student.get_full_name() or lesson.student.email
         welcome = (
-            f"Welcome to your <b>{lesson.subject.name if lesson.subject else 'tutoring'}</b> "
-            f"session with <b>{lesson.tutor.user.full_name}</b>!<br>"
-            f"Session duration: <b>{duration} minutes</b>.<br>"
-            "Please make sure your camera and microphone are working."
+            f'Welcome to your <b>{subject_name}</b> session with <b>{tutor_name}</b>!<br>'
+            f'Session duration: <b>{duration} minutes</b>.<br>'
+            'Please make sure your camera and microphone are working.'
         )
-
         self.create_meeting(
             meeting_id=meeting_id,
-            meeting_name=f"{lesson.subject.name if lesson.subject else 'Gooprep'} - {lesson.tutor.user.full_name}",
+            meeting_name=f'{subject_name} - {tutor_name}',
             attendee_pw=attendee_pw,
             moderator_pw=moderator_pw,
             lesson=lesson,
-            duration_minutes=duration + 10,  # 10 min grace period
+            duration_minutes=duration + 10,
             record=lesson.record_session,
             auto_start_recording=lesson.record_session,
             welcome_message=welcome,
             logo_url=logo,
-            meta={
-                'platform': 'gooprep',
-                'subject': lesson.subject.name if lesson.subject else '',
-                'created': timezone.now().isoformat(),
-            }
+            meta={'platform': 'gooprep', 'subject': subject_name,
+                  'created': timezone.now().isoformat()},
         )
-
         tutor_join = self.join_url(
-            meeting_id=meeting_id,
-            full_name=lesson.tutor.user.full_name,
-            password=moderator_pw,
-            user_id=str(lesson.tutor.user.id),
-            role='MODERATOR',
-            avatar_url=lesson.tutor.user.avatar_url,
-            userdata={
-                'bbb_skip_check_audio': 'false',
-                'bbb_auto_share_webcam': 'true',
-                'bbb_show_participants_on_login': 'true',
-                'bbb_enable_video': 'true',
-                'bbb_record_video': str(lesson.record_session).lower(),
-            }
+            meeting_id, tutor_name, moderator_pw, str(lesson.tutor.id),
+            role='MODERATOR', avatar_url=lesson.tutor.get_avatar_url(),
         )
-
         student_join = self.join_url(
-            meeting_id=meeting_id,
-            full_name=lesson.student.user.full_name,
-            password=attendee_pw,
-            user_id=str(lesson.student.user.id),
-            role='VIEWER',
-            avatar_url=lesson.student.user.avatar_url,
-            userdata={
-                'bbb_skip_check_audio': 'false',
-                'bbb_auto_share_webcam': 'true',
-                'bbb_show_participants_on_login': 'true',
-            }
+            meeting_id, student_name, attendee_pw, str(lesson.student.id),
+            role='VIEWER', avatar_url=lesson.student.get_avatar_url(),
         )
-
         return {
             'meeting_id': meeting_id,
             'attendee_pw': attendee_pw,

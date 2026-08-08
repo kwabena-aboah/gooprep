@@ -2,10 +2,9 @@
 Gooprep Backend Unit Tests
 Tests all core modules: auth, tutors, scheduling, payments, messaging, admin_panel
 """
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
-from rest_framework import status
 
 User = get_user_model()
 
@@ -134,7 +133,7 @@ class NotificationTestCase(TestCase):
     def setUp(self):
         self.user = make_user('notif@test.com')
         self.client = auth_client(self.user)
-        from accounts.models import Notification
+        from apps.accounts.models import Notification
         Notification.objects.create(user=self.user, title='Test', message='Hello', notification_type='system')
 
     def test_list_notifications(self):
@@ -151,7 +150,7 @@ class NotificationTestCase(TestCase):
 class SubjectTestCase(TestCase):
     def setUp(self):
         self.client = APIClient()
-        from tutors.models import Subject
+        from apps.tutors.models import Subject
         Subject.objects.create(name='Mathematics', slug='mathematics')
         Subject.objects.create(name='English', slug='english')
 
@@ -163,10 +162,10 @@ class SubjectTestCase(TestCase):
 
 class TutorProfileTestCase(TestCase):
     def setUp(self):
-        from tutors.models import Subject
+        from apps.tutors.models import Subject
         self.subj  = Subject.objects.create(name='Physics', slug='physics')
         self.tutor = make_user('tutor@test.com', role='tutor')
-        from tutors.models import TutorProfile
+        from apps.tutors.models import TutorProfile
         self.tp = TutorProfile.objects.create(
             user=self.tutor, headline='Physics Expert',
             hourly_rate=80, approval_status='approved'
@@ -223,7 +222,7 @@ class TutorProfileTestCase(TestCase):
 
 class TutorOnboardingTestCase(TestCase):
     def setUp(self):
-        from tutors.models import Subject
+        from apps.tutors.models import Subject
         self.subj  = Subject.objects.create(name='Chemistry', slug='chemistry')
         self.tutor = make_user('onboard@test.com')
         self.client = auth_client(self.tutor)
@@ -244,7 +243,7 @@ class TutorOnboardingTestCase(TestCase):
 # ── 3. Scheduling Tests ───────────────────────────────────────────
 class LessonTestCase(TestCase):
     def setUp(self):
-        from tutors.models import Subject, TutorProfile
+        from apps.tutors.models import Subject, TutorProfile
         from django.utils import timezone
         self.subj    = Subject.objects.create(name='Maths', slug='maths')
         self.tutor   = make_user('tutor2@test.com', role='tutor')
@@ -292,7 +291,7 @@ class LessonTestCase(TestCase):
         self.assertEqual(resp.data['booker_name'], 'Ama Boateng')
         self.assertEqual(resp.data['booker_relationship'], 'Parent')
         # Student should be the actual learner, not the parent
-        from scheduling.models import Lesson
+        from apps.scheduling.models import Lesson
         lesson = Lesson.objects.get(id=resp.data['id'])
         self.assertEqual(lesson.student.email, self.student.email)
 
@@ -324,6 +323,7 @@ class LessonTestCase(TestCase):
         self.assertEqual(resp2.status_code, 200)
         self.assertTrue(resp2.data['rescheduled'])
 
+    @override_settings(BBB_URL='', BBB_SECRET='')
     def test_join_lesson_no_bbb(self):
         c    = auth_client(self.student)
         resp = self._book(c)
@@ -370,8 +370,8 @@ class TransactionTestCase(TestCase):
 
 class DisputeTestCase(TestCase):
     def setUp(self):
-        from tutors.models import Subject, TutorProfile
-        from scheduling.models import Lesson
+        from apps.tutors.models import Subject, TutorProfile
+        from apps.scheduling.models import Lesson
         from django.utils import timezone
         from datetime import timedelta
         self.tutor   = make_user('dtutor@test.com', role='tutor')
@@ -442,8 +442,8 @@ class MessagingTestCase(TestCase):
 # ── 6. Reviews Tests ──────────────────────────────────────────────
 class ReviewTestCase(TestCase):
     def setUp(self):
-        from tutors.models import Subject, TutorProfile
-        from scheduling.models import Lesson
+        from apps.tutors.models import Subject, TutorProfile
+        from apps.scheduling.models import Lesson
         from django.utils import timezone
         from datetime import timedelta
         self.tutor   = make_user('rtutor@test.com', role='tutor')
@@ -485,7 +485,7 @@ class GamificationTestCase(TestCase):
     def setUp(self):
         self.user   = make_user('gamer@test.com')
         self.client = auth_client(self.user)
-        from gamification.models import Badge
+        from apps.gamification.models import Badge
         Badge.objects.create(name='First Lesson', icon='bi bi-star', points_required=10)
 
     def test_list_badges_empty(self):
@@ -494,11 +494,11 @@ class GamificationTestCase(TestCase):
         self.assertEqual(len(resp.data), 0)
 
     def test_award_points_and_badge(self):
-        from gamification.views import award_points
+        from apps.gamification.views import award_points
         award_points(self.user, 50, 'lesson_completed', 'First lesson done')
         self.user.refresh_from_db()
         self.assertEqual(self.user.total_points, 50)
-        from gamification.models import UserBadge
+        from apps.gamification.models import UserBadge
         badges = UserBadge.objects.filter(user=self.user)
         self.assertEqual(badges.count(), 1)
 
@@ -512,13 +512,13 @@ class GamificationTestCase(TestCase):
 # ── 8. Courses Tests ──────────────────────────────────────────────
 class GroupClassTestCase(TestCase):
     def setUp(self):
-        from tutors.models import Subject
+        from apps.tutors.models import Subject
         from django.utils import timezone
         from datetime import timedelta
         self.subj    = Subject.objects.create(name='Coding', slug='coding')
         self.tutor   = make_user('gtutor@test.com', role='tutor')
         self.student = make_user('gstudent@test.com', role='student')
-        from courses.models import GroupClass
+        from apps.courses.models import GroupClass
         self.gc = GroupClass.objects.create(
             tutor=self.tutor, subject=self.subj,
             title='Python Bootcamp', description='Learn Python fast',
@@ -556,7 +556,7 @@ class AdminPanelTestCase(TestCase):
         self.admin   = make_user('admin@test.com', role='admin', is_staff=True, is_superuser=True)
         self.student = make_user('astudent@test.com', role='student')
         self.tutor   = make_user('atutor@test.com', role='tutor')
-        from tutors.models import TutorProfile
+        from apps.tutors.models import TutorProfile
         self.tp = TutorProfile.objects.create(user=self.tutor, hourly_rate=80, approval_status='pending')
         self.client = auth_client(self.admin)
 
@@ -600,14 +600,14 @@ class AdminPanelTestCase(TestCase):
         self.assertEqual(self.tp.approval_status, 'rejected')
 
     def test_student_approval_list(self):
-        from students.models import StudentProfile
+        from apps.students.models import StudentProfile
         StudentProfile.objects.create(user=self.student, is_approved=False)
         resp = self.client.get('/api/admin-panel/students/?approval_status=pending')
         self.assertEqual(resp.status_code, 200)
         self.assertGreaterEqual(resp.data['count'], 1)
 
     def test_approve_student(self):
-        from students.models import StudentProfile
+        from apps.students.models import StudentProfile
         StudentProfile.objects.create(user=self.student, is_approved=False)
         resp = self.client.post(f'/api/admin-panel/students/{self.student.id}/approve/', {'action': 'approve'}, format='json')
         self.assertEqual(resp.status_code, 200)
@@ -616,14 +616,14 @@ class AdminPanelTestCase(TestCase):
         self.assertTrue(sp.is_approved)
 
     def test_suspend_student(self):
-        from students.models import StudentProfile
+        from apps.students.models import StudentProfile
         StudentProfile.objects.create(user=self.student, is_approved=True)
         resp = self.client.post(f'/api/admin-panel/students/{self.student.id}/approve/', {'action': 'suspend'}, format='json')
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(resp.data['approved'])
 
     def test_bulk_approve_students(self):
-        from students.models import StudentProfile
+        from apps.students.models import StudentProfile
         u2 = make_user('bs2@test.com', role='student')
         StudentProfile.objects.create(user=self.student, is_approved=False)
         StudentProfile.objects.create(user=u2, is_approved=False)
@@ -752,7 +752,7 @@ class PasswordResetTestCase(TestCase):
         self.assertEqual(resp.status_code, 200)
 
     def test_confirm_reset_with_token(self):
-        from accounts.models import PasswordResetToken
+        from apps.accounts.models import PasswordResetToken
         import uuid
         tok = PasswordResetToken.objects.create(user=self.user, token=str(uuid.uuid4()).replace('-',''))
         resp = self.client.post('/api/auth/password/reset/confirm/', {

@@ -1,5 +1,11 @@
 from django.contrib import admin
-from .models import Transaction, Payout, Dispute
+from .models import Transaction, Subscription, Payout, Dispute
+
+@admin.register(Subscription)
+class SubscriptionAdmin(admin.ModelAdmin):
+    list_display = ('id', 'user', 'plan', 'billing_cycle', 'amount', 'status', 'expires_at')
+    list_filter = ('plan', 'billing_cycle', 'status')
+    search_fields = ('user__email', 'paystack_ref')
 
 @admin.register(Transaction)
 class TransactionAdmin(admin.ModelAdmin):

@@ -71,7 +71,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useNotifStore } from '@/stores/notifs'
 import { apiGet } from '@/utils/api'
-import { timeAgo, fmtDate, notifIcon } from '@/utils/helpers'
+import { timeAgo, notifIcon } from '@/utils/helpers'
 import GpSpinner from '@/components/common/GpSpinner.vue'
 import GpEmpty   from '@/components/common/GpEmpty.vue'
 

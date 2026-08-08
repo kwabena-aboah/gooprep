@@ -39,10 +39,10 @@
       </div>
       <hr style="border-color:rgba(255,255,255,.1)">
       <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <span class="small opacity-50">© 2025 Gooprep. Made with ❤️ in Ghana 🇬🇭</span>
+        <span class="small opacity-50">© 2025 Gooprep.</span>
         <div class="d-flex gap-2">
           <span class="badge bg-success small"><i class="bi bi-shield-check me-1"></i>Paystack Secured</span>
-          <span class="badge bg-primary small"><i class="bi bi-camera-video me-1"></i>BigBlueButton</span>
+          <span class="badge bg-primary small"><i class="bi bi-camera-video me-1"></i>VirtualClassRoom</span>
         </div>
       </div>
     </div>

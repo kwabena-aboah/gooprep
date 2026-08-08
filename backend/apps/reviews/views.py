@@ -1,4 +1,4 @@
-from rest_framework import permissions, status
+from rest_framework import permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from .models import Review
@@ -16,7 +16,7 @@ class ReviewListView(APIView):
         return Response({'count':total,'results':ReviewSerializer(qs[(page-1)*page_size:page*page_size],many=True).data})
 
     def post(self, request):
-        from scheduling.models import Lesson
+        from apps.scheduling.models import Lesson
         try: lesson = Lesson.objects.get(id=request.data.get('lesson'), student=request.user, status='completed')
         except: return Response({'error':'Lesson not found or not completed.'}, status=400)
         if Review.objects.filter(lesson=lesson).exists():
@@ -31,19 +31,17 @@ class ReviewListView(APIView):
         )
         lesson.has_review = True; lesson.save(update_fields=['has_review'])
         # Update tutor average rating
-        from django.db.models import Avg
-        from tutors.models import TutorProfile
+        from django.db.models import Avg, Count
+        from apps.tutors.models import TutorProfile
         try:
             tp = TutorProfile.objects.get(user=lesson.tutor)
             agg = Review.objects.filter(tutor=lesson.tutor, is_approved=True).aggregate(avg=Avg('rating'), cnt=Count('id'))
-            from django.db.models import Count
-            agg = Review.objects.filter(tutor=lesson.tutor,is_approved=True).aggregate(avg=Avg('rating'),cnt=Count('id'))
             tp.average_rating = round(agg['avg'] or 0, 2)
             tp.total_reviews  = agg['cnt']
             tp.save(update_fields=['average_rating','total_reviews'])
         except: pass
         try:
-            from messaging.guppy import get_or_create_guppy_user, send_push_notification
+            from apps.messaging.guppy import get_or_create_guppy_user, send_push_notification
             gid = get_or_create_guppy_user(lesson.tutor)
             if gid: send_push_notification(gid,'⭐ New Review!',f'{request.user.get_full_name()} gave you {r.rating} stars.')
         except: pass

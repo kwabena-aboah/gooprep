@@ -18,7 +18,7 @@
     <div class="mb-3"><label class="form-label small fw-600">Topic</label><input class="form-control form-control-sm" v-model="form.topic" placeholder="What to cover?"/></div>
     <div class="gp-card-flat p-3 mb-3" style="background:var(--gp-surface)">
       <div class="d-flex justify-content-between small mb-1"><span>Lesson ({{ form.duration }} min)</span><span>GHS {{ lessonCost }}</span></div>
-      <div class="d-flex justify-content-between small text-muted mb-1"><span>Platform fee (15%)</span><span>GHS {{ fee }}</span></div>
+      <div class="d-flex justify-content-between small text-muted mb-1"><span>Platform fee (20%)</span><span>GHS {{ fee }}</span></div>
       <div class="d-flex justify-content-between fw-700 border-top pt-2"><span>Total</span><span class="text-gp-primary">GHS {{ total }}</span></div>
     </div>
     <button class="btn btn-gp w-100 py-2" @click="$emit('book',form)" :disabled="loading||!form.date||!form.time">
@@ -34,6 +34,6 @@ defineEmits(['book'])
 const today=new Date().toISOString().split('T')[0]
 const form=ref({date:'',time:'10:00',duration:'60',subject:props.tutor?.subjects_list?.[0]?.id||'',type:'regular',topic:'',record:true})
 const lessonCost=computed(()=>form.value.type==='trial'?parseFloat(props.tutor.trial_lesson_price||0).toFixed(2):(parseFloat(props.tutor.hourly_rate||0)*parseInt(form.value.duration)/60).toFixed(2))
-const fee=computed(()=>(parseFloat(lessonCost.value)*0.15).toFixed(2))
-const total=computed(()=>(parseFloat(lessonCost.value)*1.15).toFixed(2))
+const fee=computed(()=>(parseFloat(lessonCost.value)*0.20).toFixed(2))
+const total=computed(()=>(parseFloat(lessonCost.value)*1.20).toFixed(2))
 </script>

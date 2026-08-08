@@ -4,7 +4,6 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenRefreshView
 from django.contrib.auth import get_user_model
 from django.core.mail import send_mail
 from django.conf import settings
@@ -20,7 +19,8 @@ class CustomTokenObtainPairView(APIView):
 
     def post(self, request):
         ser = CustomTokenObtainPairSerializer(data=request.data, context={'request': request})
-        ser.is_valid(raise_exception=True)
+        if not ser.is_valid():
+            return Response(ser.errors, status=401)
         return Response(ser.validated_data)
 
 

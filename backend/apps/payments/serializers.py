@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Transaction, Payout, Dispute
+from .models import Transaction, Subscription, Payout, Dispute
 
 class TransactionSerializer(serializers.ModelSerializer):
     payer_name = serializers.SerializerMethodField()
@@ -8,6 +8,12 @@ class TransactionSerializer(serializers.ModelSerializer):
         fields = ['id','payer_name','amount','currency','payment_method','status',
                   'paystack_ref','description','created_at']
     def get_payer_name(self, obj): return obj.payer.get_full_name()
+
+class SubscriptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Subscription
+        fields = ['id', 'plan', 'billing_cycle', 'amount', 'status', 'paystack_ref', 'starts_at', 'expires_at', 'created_at']
+
 
 class PayoutSerializer(serializers.ModelSerializer):
     class Meta: model = Payout; fields = ['id','amount','method','status','requested_at','processed_at']

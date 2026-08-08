@@ -39,7 +39,7 @@ try:
         lessons = Lesson.objects.filter(start_time__gte=window_start,start_time__lte=window_end,status='confirmed').select_related('tutor','student','subject')
         for l in lessons:
             try:
-                from messaging.guppy import notify_lesson_reminder
+                from apps.messaging.guppy import notify_lesson_reminder
                 notify_lesson_reminder(l)
             except Exception: pass
 

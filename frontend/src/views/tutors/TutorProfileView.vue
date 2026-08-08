@@ -123,6 +123,13 @@
             </div>
             <BookingWidget :tutor="profile" :loading="booking" @book="confirmBook" />
           </div>
+
+          <PaymentPrompt
+            v-if="paymentLesson"
+            :lesson="paymentLesson"
+            :tutor-name="profile.full_name"
+            @cancel="paymentLesson = null"
+          />
         </div>
 
         <!-- Sidebar -->
@@ -166,6 +173,7 @@ import GpSpinner    from '@/components/common/GpSpinner.vue'
 import GpEmpty      from '@/components/common/GpEmpty.vue'
 import ReviewList   from '@/components/tutor/ReviewList.vue'
 import BookingWidget from '@/components/scheduling/BookingWidget.vue'
+import PaymentPrompt from '@/components/payments/PaymentPrompt.vue'
 
 const route      = useRoute()
 const router     = useRouter()
@@ -179,6 +187,7 @@ const availability = ref([])
 const isFav      = ref(false)
 const activeTab  = ref('About')
 const booking    = ref(false)
+const paymentLesson = ref(null)
 const tabs       = ['About', 'Reviews', 'schedule']
 const days       = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
 const fallback   = computed(() => `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.value?.full_name||'T')}&background=e63900&color=fff`)
@@ -208,18 +217,22 @@ async function confirmBook(form) {
   booking.value = true
   const start = new Date(`${form.date}T${form.time}:00`)
   const end   = new Date(start.getTime() + parseInt(form.duration)*60000)
+  const price = form.type === 'trial'
+    ? profile.value.trial_lesson_price
+    : (profile.value.hourly_rate * form.duration / 60).toFixed(2)
+
   try {
-    await apiPost('/scheduling/lessons/', {
+    const { data } = await apiPost('/scheduling/lessons/', {
       tutor: profile.value.id, subject: form.subject, lesson_type: form.type,
       start_time: start.toISOString(), end_time: end.toISOString(),
-      price: form.type==='trial' ? profile.value.trial_lesson_price : (profile.value.hourly_rate * form.duration/60).toFixed(2),
-      currency: 'GHS', record_session: form.record, topic: form.topic,
+      price, currency: 'GHS', record_session: form.record, topic: form.topic,
     })
-    notifStore.toast('Lesson booked!', 'success')
-    setTimeout(() => router.push('/lessons'), 1500)
-  } catch(e) {
-    notifStore.toast(Object.values(e.response?.data||{}).flat().join(' ')||'Failed.', 'error')
-  } finally { booking.value = false }
+    paymentLesson.value = { ...data, price, start_time: start.toISOString(), subject_name: profile.value.subjects_list?.find(s => s.id === form.subject)?.name }
+  } catch (e) {
+    notifStore.toast(Object.values(e.response?.data || {}).flat().join(' ') || 'Failed to create lesson.', 'error')
+  } finally {
+    booking.value = false
+  }
 }
 
 onMounted(async () => {

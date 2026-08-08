@@ -6,9 +6,16 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-def _enabled(): return bool(settings.GUPPY_ENABLED and settings.GUPPY_API_KEY and settings.GUPPY_APP_ID)
-def _headers(): return {'Authorization':f'Bearer {settings.GUPPY_API_KEY}','X-App-ID':settings.GUPPY_APP_ID,'Content-Type':'application/json'}
-BASE = lambda: settings.GUPPY_API_URL
+def _enabled():
+    return bool(settings.GUPPY_ENABLED and settings.GUPPY_API_KEY and settings.GUPPY_APP_ID and settings.GUPPY_API_URL)
+
+
+def _headers():
+    return {'Authorization': f'Bearer {settings.GUPPY_API_KEY}', 'X-App-ID': settings.GUPPY_APP_ID, 'Content-Type': 'application/json'}
+
+
+def BASE():
+    return settings.GUPPY_API_URL.rstrip('/')
 
 def register_user(user) -> Optional[str]:
     if not _enabled(): return None

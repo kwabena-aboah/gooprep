@@ -1,5 +1,5 @@
-from rest_framework import permissions, status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework import permissions
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
@@ -12,7 +12,7 @@ class StudentProfileView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        from scheduling.models import Lesson
+        from apps.scheduling.models import Lesson
         from django.db.models import Sum
         sp, _  = StudentProfile.objects.get_or_create(user=request.user)
         lessons = Lesson.objects.filter(student=request.user)

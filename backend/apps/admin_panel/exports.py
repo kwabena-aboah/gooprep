@@ -153,7 +153,6 @@ def _pdf_base(title: str, headers: list, rows: list) -> bytes:
     from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.enums import TA_CENTER
-    from functools import partial
 
     buf  = io.BytesIO()
     page = landscape(A4) if len(headers) > 6 else A4

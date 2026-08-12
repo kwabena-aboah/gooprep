@@ -10,14 +10,14 @@
         <div v-if="auth.error" class="alert alert-danger small py-2 d-flex align-items-center gap-2">
           <i class="bi bi-exclamation-circle-fill"></i>{{ auth.error }}
         </div>
-        <div class="d-grid mb-4">
+        <!-- <div class="d-grid mb-4">
           <a href="/api/auth/google/" class="btn btn-outline-secondary d-flex align-items-center justify-content-center gap-2">
             <strong>G</strong> Continue with Google
           </a>
-        </div>
-        <div class="d-flex align-items-center gap-2 mb-4">
+        </div> -->
+        <!-- <div class="d-flex align-items-center gap-2 mb-4">
           <hr class="flex-grow-1"><span class="text-muted small">or email</span><hr class="flex-grow-1">
-        </div>
+        </div> -->
         <div class="mb-3">
           <label class="form-label small fw-600">Email address</label>
           <div class="input-group">
@@ -50,8 +50,8 @@
       </div>
       <div class="d-flex justify-content-center gap-4 mt-4 flex-wrap">
         <span class="text-white-50 small"><i class="bi bi-shield-lock me-1 text-success"></i>SSL secured</span>
-        <span class="text-white-50 small"><i class="bi bi-people me-1 text-primary"></i>50K+ learners</span>
-        <span class="text-white-50 small"><i class="bi bi-star-fill me-1 text-warning"></i>4.9 rated</span>
+        <!-- <span class="text-white-50 small"><i class="bi bi-people me-1 text-primary"></i>50K+ learners</span> -->
+        <!-- <span class="text-white-50 small"><i class="bi bi-star-fill me-1 text-warning"></i>4.9 rated</span> -->
       </div>
     </div>
   </div>

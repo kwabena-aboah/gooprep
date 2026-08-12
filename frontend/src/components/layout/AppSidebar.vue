@@ -30,7 +30,7 @@
         <div class="sidebar-section">Learning</div>
         <RouterLink class="sidebar-link" :class="{active:isActive('/tutors')}" to="/tutors"><i class="bi bi-search"></i>Find Tutors</RouterLink>
         <RouterLink class="sidebar-link" :class="{active:isActive('/group-classes')}" to="/group-classes"><i class="bi bi-people"></i>Group Classes</RouterLink>
-        <RouterLink class="sidebar-link" :class="{active:isActive('/learning')}" to="/learning"><i class="bi bi-map"></i>Learning Paths</RouterLink>
+        <RouterLink class="sidebar-link" :class="{active:isActive('/learning')}" to="/learning"><i class="bi bi-map"></i>Learning Hub</RouterLink>
         <RouterLink class="sidebar-link" :class="{active:isActive('/knowledge-base')}" to="/knowledge-base"><i class="bi bi-journal-richtext"></i>Knowledge Base</RouterLink>
       </template>
       <template v-if="auth.isTutor">

@@ -25,6 +25,20 @@ const props=defineProps({questions:{type:Array,default:() => []}})
 const answers=ref({})
 const done=computed(()=>Object.keys(answers.value).length===props.questions.length)
 const score=computed(()=>Object.values(answers.value).filter(a=>a.correct).length)
-function answer(qi,opt,correctAnswer){answers.value={...answers.value,[qi]:{opt,correct:opt.startsWith(correctAnswer)}}}
-function ac(qi,opt){const a=answers.value[qi];if(!a)return 'btn-outline-secondary';if(a.opt===opt)return a.correct?'btn-success':'btn-danger';if(opt.startsWith(props.questions[qi]?.answer)&&!a.correct)return 'btn-outline-success';return 'btn-outline-secondary opacity-50'}
+function normalize(value) {
+  return String(value ?? '').trim().toLowerCase()
+}
+function answer(qi, opt, correctAnswer) {
+  answers.value = {
+    ...answers.value,
+    [qi]: { opt, correct: normalize(opt) === normalize(correctAnswer) },
+  }
+}
+function ac(qi, opt) {
+  const a = answers.value[qi]
+  if (!a) return 'btn-outline-secondary'
+  if (a.opt === opt) return a.correct ? 'btn-success' : 'btn-danger'
+  if (normalize(opt) === normalize(props.questions[qi]?.answer) && !a.correct) return 'btn-outline-success'
+  return 'btn-outline-secondary opacity-50'
+}
 </script>

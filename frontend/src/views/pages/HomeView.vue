@@ -18,12 +18,12 @@
               <RouterLink to="/register" class="btn btn-gp btn-lg px-4"><i class="bi bi-rocket-takeoff me-2"></i>Get Started Free</RouterLink>
               <RouterLink to="/tutors" class="btn btn-outline-light btn-lg px-4"><i class="bi bi-search me-2"></i>Browse Tutors</RouterLink>
             </div>
-            <div class="d-flex gap-4 flex-wrap">
+            <!-- <div class="d-flex gap-4 flex-wrap">
               <div class="text-center"><div class="fw-800 text-white fs-4">50K+</div><div class="text-white-50 small">Students</div></div>
               <div class="text-center"><div class="fw-800 text-white fs-4">2,000+</div><div class="text-white-50 small">Tutors</div></div>
               <div class="text-center"><div class="fw-800 text-white fs-4">100K+</div><div class="text-white-50 small">Lessons</div></div>
               <div class="text-center"><div class="fw-800 text-white fs-4">4.9★</div><div class="text-white-50 small">Rating</div></div>
-            </div>
+            </div> -->
           </div>
           <div class="col-lg-6 d-none d-lg-block">
             <div class="position-relative">

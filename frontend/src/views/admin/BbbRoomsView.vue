@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-      <div><h2 class="fw-800 mb-0">Gooprep Rooms</h2><p class="text-muted small mb-0">BigBlueButton server & active sessions</p></div>
+      <div><h2 class="fw-800 mb-0">Gooprep Rooms</h2><p class="text-muted small mb-0">GooPrep Virtual Server & Active Sessions</p></div>
       <button class="btn btn-gp btn-sm" @click="fetch"><i class="bi bi-arrow-clockwise me-1"></i>Refresh</button>
     </div>
     <GpSpinner v-if="loading" />

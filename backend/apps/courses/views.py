@@ -2,6 +2,8 @@ from rest_framework import permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from django.db import transaction
+from django.db.models import Q
 from .models import GroupClass, GroupClassEnrollment
 from .serializers import GroupClassSerializer
 
@@ -12,7 +14,11 @@ class GroupClassListView(APIView):
         qs = GroupClass.objects.filter(is_active=True).select_related('tutor','subject')
         subject = request.query_params.get('subject')
         level   = request.query_params.get('level')
-        if subject: qs = qs.filter(subject__slug=subject)
+        if subject:
+            subject_filter = Q(subject__slug=subject)
+            if str(subject).isdigit():
+                subject_filter |= Q(subject_id=int(subject))
+            qs = qs.filter(subject_filter)
         if level:   qs = qs.filter(level=level)
         page_size = int(request.query_params.get('page_size', 12))
         page      = int(request.query_params.get('page', 1))
@@ -75,6 +81,40 @@ def enroll_class(request, pk):
     except Exception:
         pass
     return Response({'enrolled': True, 'class_id': gc.id}, status=201)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def bulk_enroll_classes(request):
+    class_ids = request.data.get('class_ids', [])
+    if not isinstance(class_ids, list) or not class_ids:
+        return Response({'error': 'class_ids must be a non-empty list.'}, status=400)
+
+    with transaction.atomic():
+        classes = list(
+            GroupClass.objects.select_for_update()
+            .filter(id__in=class_ids, is_active=True)
+        )
+        if len(classes) != len(set(class_ids)):
+            return Response({'error': 'One or more group classes were not found.'}, status=404)
+
+        already = set(GroupClassEnrollment.objects.filter(
+            student=request.user, group_class_id__in=class_ids
+        ).values_list('group_class_id', flat=True))
+        to_enroll = [gc for gc in classes if gc.id not in already]
+        full = [gc.id for gc in to_enroll if gc.enrolled >= gc.max_students]
+        if full:
+            return Response({'error': 'Some selected classes are full.', 'full_class_ids': full}, status=400)
+
+        GroupClassEnrollment.objects.bulk_create([
+            GroupClassEnrollment(group_class=gc, student=request.user)
+            for gc in to_enroll
+        ])
+
+    return Response({
+        'enrolled': [gc.id for gc in to_enroll],
+        'already_enrolled': sorted(already),
+    }, status=201)
+
 
 @api_view(['DELETE'])
 @permission_classes([permissions.IsAuthenticated])

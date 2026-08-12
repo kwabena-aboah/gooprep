@@ -73,9 +73,14 @@ const isPublicRoute = computed(() =>
   PUBLIC_ROUTES.includes(route.name)
 )
 
-const isPublicLayout = computed(() =>
-  isPublicRoute.value || !authStore.isAuthenticated
-)
+const isPublicLayout = computed(() => {
+  const authenticatedShellRoutes = ['group-classes', 'tutor-search']
+  const useAuthenticatedShell =
+    authStore.isAuthenticated && authenticatedShellRoutes.includes(route.name)
+
+  return (isPublicRoute.value && !useAuthenticatedShell)
+    || !authStore.isAuthenticated
+})
 
 const handleResize = () => {
   isMobile.value = window.innerWidth < 992

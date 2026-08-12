@@ -33,7 +33,6 @@ const routes=[
   {path:'/lessons/:id/join',name:'lesson-join',component: () => import('@/views/scheduling/LessonRoomView.vue'),meta:{auth:true}},
   {path:'/lessons/:id/reschedule',name:'reschedule',component: () => import('@/views/scheduling/RescheduleView.vue'),meta:{auth:true}},
   {path:'/learning',name:'learning',component: () => import('@/views/students/LearningView.vue'),meta:{auth:true,role:'student'}},
-  {path:'/learning-paths',name:'learning-paths',component: () => import('@/views/students/LearningView.vue'),meta:{auth:true,role:'student'}},
   {path:'/knowledge-base',name:'knowledge-base',component: () => import('@/views/students/LearningView.vue'),meta:{auth:true,role:'student'}},
   {path:'/assessments',name:'assessments',component: () => import('@/views/students/LearningView.vue'),meta:{auth:true,role:'student'}},
   {path:'/tutor-onboarding',name:'onboarding',component: () => import('@/views/tutors/OnboardingView.vue'),meta:{auth:true,role:'tutor'}},

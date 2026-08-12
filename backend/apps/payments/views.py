@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.conf import settings
 from django.utils import timezone
+from django.db.models import Q
 from datetime import timedelta
 from .models import Transaction, Subscription, Payout, Dispute
 from . import paystack
@@ -101,7 +102,11 @@ def initiate_payment(request):
         return Response({'error': 'Unsupported payment method.'}, status=400)
     from apps.scheduling.models import Lesson
     try:
-        lesson = Lesson.objects.get(id=lesson_id, student=request.user)
+        lesson = Lesson.objects.filter(
+            Q(id=lesson_id) & (Q(student=request.user) | Q(booked_on_behalf=True, booker_email__iexact=request.user.email))
+        ).first()
+        if not lesson:
+            return Response({'error': 'Lesson not found.'}, status=404)
     except Lesson.DoesNotExist:
         return Response({'error': 'Lesson not found.'}, status=404)
     if lesson.payment_status == 'paid':
@@ -183,7 +188,9 @@ def _settle_successful_reference(reference):
     if txn and txn.status != 'success':
         txn.status = 'success'; txn.save(update_fields=['status'])
         if txn.lesson and txn.lesson.payment_status != 'paid':
-            txn.lesson.payment_status = 'paid'; txn.lesson.save(update_fields=['payment_status'])
+            txn.lesson.payment_status = 'paid'
+            txn.lesson.status = 'confirmed'
+            txn.lesson.save(update_fields=['payment_status', 'status'])
             from apps.tutors.models import TutorProfile
             tp = TutorProfile.objects.filter(user=txn.lesson.tutor).first()
             if tp:

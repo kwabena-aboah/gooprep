@@ -69,6 +69,46 @@ class AdminStatsView(APIView):
         })
 
 
+class AdminReferralListView(APIView):
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        from django.contrib.auth import get_user_model
+        from .serializers import ReferralSerializer
+
+        User = get_user_model()
+        queryset = User.objects.filter(was_referred=True).order_by('-date_joined')
+        search = request.query_params.get('search', '').strip()
+        role = request.query_params.get('role', '').strip()
+
+        if search:
+            queryset = queryset.filter(
+                Q(first_name__icontains=search)
+                | Q(last_name__icontains=search)
+                | Q(email__icontains=search)
+                | Q(referrer_name__icontains=search)
+            )
+        if role:
+            queryset = queryset.filter(role=role)
+
+        try:
+            page_size = min(max(int(request.query_params.get('page_size', 20)), 1), 100)
+        except (TypeError, ValueError):
+            page_size = 20
+        try:
+            page = max(int(request.query_params.get('page', 1)), 1)
+        except (TypeError, ValueError):
+            page = 1
+
+        total = queryset.count()
+        start = (page - 1) * page_size
+        results = queryset[start:start + page_size]
+        return Response({
+            'count': total,
+            'results': ReferralSerializer(results, many=True).data,
+        })
+
+
 class AdminUserListView(APIView):
     permission_classes = [IsAdmin]
 
@@ -153,6 +193,12 @@ class StudentApprovalListView(APIView):
 
     def get(self, request):
         from apps.students.models import StudentProfile
+        User = __import__('django.contrib.auth', fromlist=['get_user_model']).get_user_model()
+        for student in User.objects.filter(role='student').iterator():
+            StudentProfile.objects.get_or_create(
+                user=student,
+                defaults={'needs_approval': True, 'is_approved': False},
+            )
         approval_status = request.query_params.get('approval_status', 'pending')
         search          = request.query_params.get('search','')
 
@@ -350,21 +396,24 @@ class BBBStatusView(APIView):
     permission_classes = [IsAdmin]
 
     def get(self, request):
-        from django.conf import settings
-        import hashlib, urllib.request
-        bbb_url    = settings.BBB_URL
-        bbb_secret = settings.BBB_SECRET
-        if not bbb_url:
-            return Response({'online': False, 'url': '', 'version': '—',
-                             'active_meetings': 0, 'participant_count': 0})
-        try:
-            checksum = hashlib.sha1(f'getMeetingInfo{bbb_secret}'.encode()).hexdigest()
-            with urllib.request.urlopen(f'{bbb_url}getMeetingInfo?checksum={checksum}', timeout=5):
-                return Response({'online': True, 'url': bbb_url, 'version': '2.7',
-                                 'active_meetings': 0, 'participant_count': 0})
-        except Exception as e:
-            return Response({'online': False, 'url': bbb_url, 'error': str(e),
-                             'active_meetings': 0, 'participant_count': 0}) 
+        from apps.scheduling.bbb_service import bbb
+
+        meetings = bbb.get_meetings() if bbb.configured else {}
+        successful = meetings.get('returncode') == 'SUCCESS'
+        raw_meetings = meetings.get('meetings', {}).get('meeting', []) if successful else []
+        if isinstance(raw_meetings, dict):
+            raw_meetings = [raw_meetings]
+        participants = sum(int(m.get('participantCount') or 0) for m in raw_meetings)
+        return Response({
+            'online': successful,
+            'configured': bbb.configured,
+            'url': bbb.base_url,
+            'version': meetings.get('version', '—') if successful else '—',
+            'active_meetings': len(raw_meetings),
+            'meeting_count': len(raw_meetings),
+            'participant_count': participants,
+            'error': '' if successful else meetings.get('message', 'BBB is unavailable.'),
+        })
 
 class AdminBBBView(APIView):
     permission_classes = [IsAdmin]
@@ -422,6 +471,73 @@ class AdminBBBView(APIView):
             return Response({'error': 'Lesson not found.'}, status=404)
         except Exception as exc:
             return Response({'error': str(exc)}, status=500) 
+
+
+@api_view(['GET'])
+@permission_classes([IsAdmin])
+def bbb_rooms(request):
+    from apps.scheduling.bbb_service import bbb
+    response = bbb.get_meetings() if bbb.configured else {'meetings': {}}
+    meetings = response.get('meetings', {}).get('meeting', [])
+    if isinstance(meetings, dict):
+        meetings = [meetings]
+    return Response({
+        'meetings': meetings,
+        'configured': bbb.configured,
+        'error': response.get('message', ''),
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAdmin])
+def bbb_recordings(request):
+    from apps.scheduling.bbb_service import bbb
+    response = bbb.get_recordings(states='published,unpublished') if bbb.configured else {'recordings': {}}
+    recordings = response.get('recordings', {}).get('recording', [])
+    if isinstance(recordings, dict):
+        recordings = [recordings]
+
+    normalized = []
+    for recording in recordings:
+        formats = recording.get('playback', {}).get('format', [])
+        if isinstance(formats, dict):
+            formats = [formats]
+        normalized.append({
+            'recordID': recording.get('recordID', ''),
+            'name': recording.get('name', ''),
+            'duration': recording.get('duration', ''),
+            'size': recording.get('size', ''),
+            'startTime': recording.get('startTime', ''),
+            'playbackUrl': formats[0].get('url', '') if formats else '',
+        })
+    return Response({
+        'recordings': normalized,
+        'configured': bbb.configured,
+        'error': response.get('message', ''),
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAdmin])
+def bbb_end_meeting(request):
+    from apps.scheduling.bbb_service import bbb
+    meeting_id = request.data.get('meeting_id')
+    password = request.data.get('moderator_pw') or request.data.get('moderator_password', '')
+    if not meeting_id:
+        return Response({'error': 'meeting_id is required.'}, status=400)
+    response = bbb.end_meeting(meeting_id, password)
+    return Response(response, status=200 if response.get('returncode') == 'SUCCESS' else 502)
+
+
+@api_view(['POST'])
+@permission_classes([IsAdmin])
+def bbb_delete_recording(request):
+    from apps.scheduling.bbb_service import bbb
+    record_id = request.data.get('record_id')
+    if not record_id:
+        return Response({'error': 'record_id is required.'}, status=400)
+    response = bbb.delete_recording(record_id)
+    return Response(response, status=200 if response.get('returncode') == 'SUCCESS' else 502)
 
 
 # ── Export Endpoint ────────────────────────────────────────────────

@@ -13,12 +13,12 @@ class UserSerializer(serializers.ModelSerializer):
         model  = User
         fields = [
             'id','email','first_name','last_name','full_name','role','phone','bio',
-            'avatar_url','city','country','timezone','language','subscription_plan',
+            'avatar','avatar_url','city','country','timezone','language','subscription_plan',
             'total_points','level','streak_days','notify_email','notify_sms',
             'notify_push','notify_whatsapp','date_joined','last_login','is_active',
             'was_referred','referrer_name','referrer_notes',
         ]
-        read_only_fields = ['id','email','role','date_joined','last_login',
+        read_only_fields = ['id','email','role','avatar_url','date_joined','last_login',
                             'total_points','level','streak_days']
 
     def get_full_name(self, obj):  return obj.get_full_name() or obj.email
@@ -54,6 +54,13 @@ class RegisterSerializer(serializers.ModelSerializer):
         user = User(**validated_data)
         user.set_password(pw)
         user.save()
+
+        if user.role == 'student':
+            from apps.students.models import StudentProfile
+            StudentProfile.objects.get_or_create(
+                user=user,
+                defaults={'needs_approval': True, 'is_approved': False},
+            )
         return user
 
 

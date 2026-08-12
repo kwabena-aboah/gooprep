@@ -208,6 +208,13 @@
         </div>
       </div>
     </div>
+    <PaymentPrompt
+      v-if="paymentLesson"
+      :lesson="paymentLesson"
+      :tutor-name="selected?.full_name || 'your tutor'"
+      @cancel="paymentLesson = null"
+    />
+
     <AppFooter />
   </div>
 </template>
@@ -226,6 +233,7 @@ import GpPagination from '@/components/common/GpPagination.vue'
 import TutorCard    from '@/components/tutor/TutorCard.vue'
 import ReviewList   from '@/components/tutor/ReviewList.vue'
 import BookingWidget from '@/components/scheduling/BookingWidget.vue'
+import PaymentPrompt from '@/components/payments/PaymentPrompt.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
 
 const auth       = useAuthStore()
@@ -244,6 +252,7 @@ const modalReviews = ref([])
 const reviewsLoading = ref(false)
 const mTab       = ref('about')
 const booking    = ref(false)
+const paymentLesson = ref(null)
 
 const filters = ref({
   search:'', subject:'', min_price:'', max_price:'',
@@ -266,7 +275,7 @@ async function fetchTutors() {
     if (filters.value.min_rating)     params.min_rating     = filters.value.min_rating
     if (filters.value.teaching_style) params.teaching_style = filters.value.teaching_style
     if (filters.value.instant_book)   params.instant_book   = true
-    if (filters.value.featured)       params.featured       = true
+    if (filters.value.featured)       params.is_featured    = true
     const { data } = await apiGet('/tutors/', params)
     tutors.value = data.results || []; total.value = data.count || 0
   } catch { tutors.value = [] }
@@ -309,21 +318,55 @@ function msgTutor(t) {
 
 async function confirmBook(form) {
   if (!auth.isAuthenticated) { router.push('/login?next=/tutors'); return }
+
+  const start = new Date(`${form.date}T${form.time}:00`)
+  const duration = Number(form.duration)
+  const end = new Date(start.getTime() + duration * 60000)
+  const price = form.type === 'trial'
+    ? Number(selected.value.trial_lesson_price || 0)
+    : Number(selected.value.hourly_rate || 0) * duration / 60
+
+  if (Number.isNaN(start.getTime()) || !Number.isFinite(duration) || duration <= 0) {
+    notifStore.toast('Please choose a valid date, time, and duration.', 'error')
+    return
+  }
+
   booking.value = true
   try {
-    const start = new Date(`${form.date}T${form.time}:00`)
-    const end   = new Date(start.getTime() + parseInt(form.duration)*60000)
-    await apiPost('/scheduling/lessons/', {
-      tutor: selected.value.id, subject: form.subject, lesson_type: form.type,
-      start_time: start.toISOString(), end_time: end.toISOString(),
-      price: form.type==='trial' ? selected.value.trial_lesson_price : (selected.value.hourly_rate * form.duration/60).toFixed(2),
-      currency: 'GHS', record_session: form.record, topic: form.topic,
+    if (!selected.value?.user_id) {
+      notifStore.toast('Tutor account ID is missing. Please refresh and try again.', 'error')
+      return
+    }
+
+    const { data } = await apiPost('/scheduling/lessons/', {
+      tutor: selected.value.user_id,
+      subject: form.subject,
+      lesson_type: form.type,
+      start_time: start.toISOString(),
+      end_time: end.toISOString(),
+      price: Number(price.toFixed(2)),
+      currency: 'GHS',
+      record_session: Boolean(form.record),
+      topic: form.topic || '',
+      booked_on_behalf: Boolean(form.booked_on_behalf),
+      learner_email: form.learner_email || '',
+      booker_name: form.booker_name || '',
+      booker_phone: form.booker_phone || '',
+      booker_relationship: form.booker_relationship || '',
     })
-    notifStore.toast('Lesson booked! Redirecting…', 'success')
+
+    paymentLesson.value = {
+      ...data,
+      price: data.price ?? Number(price.toFixed(2)),
+      currency: data.currency || 'GHS',
+      subject_name: data.subject_name || form.subject,
+      tutor_name: selected.value.full_name,
+    }
+
     Modal.getInstance(document.getElementById('tutorModal'))?.hide()
-    setTimeout(() => router.push('/lessons'), 1500)
+    notifStore.toast('Lesson created. Please complete payment.', 'success')
   } catch(e) {
-    notifStore.toast(Object.values(e.response?.data||{}).flat().join(' ')||'Booking failed.', 'error')
+    notifStore.toast(Object.values(e.response?.data || {}).flat().join(' ') || 'Booking failed.', 'error')
   } finally { booking.value = false }
 }
 

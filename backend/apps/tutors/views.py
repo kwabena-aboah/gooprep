@@ -34,7 +34,11 @@ class TutorListView(APIView):
         if max_p: qs = qs.filter(hourly_rate__lte=max_p)
         if min_r: qs = qs.filter(average_rating__gte=min_r)
         if ib=='true': qs = qs.filter(instant_book=True)
-        if feat=='true': qs = qs.filter(is_featured=True)
+        if feat == 'true':
+            qs = qs.filter(is_featured=True)
+        teaching_style = request.query_params.get('teaching_style')
+        if teaching_style:
+            qs = qs.filter(teaching_style=teaching_style)
         order_map = {'-average_rating':'-average_rating','hourly_rate':'hourly_rate','-hourly_rate':'-hourly_rate','-total_lessons':'-total_lessons'}
         qs = qs.order_by(order_map.get(order,'-average_rating'))
         page_size = int(request.query_params.get('page_size',12))

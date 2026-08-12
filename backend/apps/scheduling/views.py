@@ -1,78 +1,508 @@
 import hashlib
 from rest_framework import permissions
 from rest_framework.decorators import api_view, permission_classes
+
+from datetime import timedelta
+from django.utils import timezone
+
+from django.contrib.auth import get_user_model
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+from django.db import transaction
+from django.db.models import Q
+
+from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.utils import timezone
-from datetime import timedelta
+
 from .models import Lesson
 from .serializers import LessonSerializer
 
+
+User = get_user_model()
+
+
 class LessonListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+
     def get(self, request):
-        u = request.user
-        if u.role == 'tutor':         qs = Lesson.objects.filter(tutor=u)
-        elif u.role in ('admin','staff'): qs = Lesson.objects.all()
-        else:                          qs = Lesson.objects.filter(student=u)
-        s  = request.query_params.get('status')
-        m  = request.query_params.get('month')
-        sid = request.query_params.get('student')
-        if s:   qs = qs.filter(status=s)
-        if m:
-            try: y,mo = m.split('-'); qs = qs.filter(start_time__year=y, start_time__month=mo)
-            except: pass
-        if sid and u.role=='tutor': qs = qs.filter(student_id=sid)
-        order = request.query_params.get('ordering','-start_time')
-        qs = qs.select_related('tutor','student','subject').order_by(order)
-        page_size = int(request.query_params.get('page_size',15))
-        page = int(request.query_params.get('page',1))
+        user = request.user
+
+        # -----------------------------------------
+        # Base queryset based on user role
+        # -----------------------------------------
+        if user.role == "tutor":
+            qs = Lesson.objects.filter(tutor=user)
+
+        elif user.role in ("admin", "staff"):
+            qs = Lesson.objects.all()
+
+        else:
+            qs = Lesson.objects.filter(student=user)
+
+        # -----------------------------------------
+        # Filters
+        # -----------------------------------------
+        status_filter = request.query_params.get("status")
+        month = request.query_params.get("month")
+        student_id = request.query_params.get("student")
+
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+
+        if month:
+            try:
+                year, month_number = month.split("-")
+
+                qs = qs.filter(
+                    start_time__year=int(year),
+                    start_time__month=int(month_number),
+                )
+
+            except (ValueError, TypeError):
+                pass
+
+        if student_id and user.role == "tutor":
+            qs = qs.filter(student_id=student_id)
+
+        # -----------------------------------------
+        # Ordering
+        # -----------------------------------------
+        ordering = request.query_params.get(
+            "ordering",
+            "-start_time"
+        )
+
+        allowed_ordering = {
+            "start_time",
+            "-start_time",
+            "created_at",
+            "-created_at",
+            "status",
+            "-status",
+        }
+
+        if ordering not in allowed_ordering:
+            ordering = "-start_time"
+
+        qs = (
+            qs
+            .select_related("tutor", "student", "subject")
+            .order_by(ordering)
+        )
+
+        # -----------------------------------------
+        # Pagination
+        # -----------------------------------------
+        try:
+            page_size = int(
+                request.query_params.get("page_size", 15)
+            )
+        except (ValueError, TypeError):
+            page_size = 15
+
+        try:
+            page = int(
+                request.query_params.get("page", 1)
+            )
+        except (ValueError, TypeError):
+            page = 1
+
+        page_size = max(1, min(page_size, 100))
+        page = max(1, page)
+
         total = qs.count()
+
+        start_index = (page - 1) * page_size
+        end_index = start_index + page_size
+
+        lessons = qs[start_index:end_index]
+
+        # -----------------------------------------
+        # Serialize
+        # -----------------------------------------
+        data = LessonSerializer(
+            lessons,
+            many=True
+        ).data
+
+        # -----------------------------------------
+        # Can join calculation
+        # -----------------------------------------
         now = timezone.now()
-        data = LessonSerializer(qs[(page-1)*page_size:page*page_size], many=True).data
-        for i, lesson in enumerate(qs[(page-1)*page_size:page*page_size]):
-            win = lesson.start_time - timedelta(minutes=10)
-            data[i]['can_join'] = now >= win and lesson.status in ('confirmed','in_progress')
-        return Response({'count':total,'results':data})
+
+        for i, lesson in enumerate(lessons):
+
+            if lesson.start_time:
+                join_window = lesson.start_time - timedelta(
+                    minutes=10
+                )
+
+                data[i]["can_join"] = (
+                    now >= join_window
+                    and lesson.status in (
+                        "confirmed",
+                        "in_progress",
+                    )
+                    and lesson.payment_status == "paid"
+                )
+            else:
+                data[i]["can_join"] = False
+
+        return Response({
+            "count": total,
+            "results": data,
+        })
 
     def post(self, request):
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
+        """
+        Create a new lesson booking.
+        """
+
         try:
-            tutor = User.objects.get(id=request.data.get('tutor'))
-            # Determine the actual student
-            student = request.user
-            if request.data.get('booked_on_behalf') and request.data.get('learner_email'):
-                learner = User.objects.filter(email=request.data['learner_email']).first()
-                if learner: student = learner
-            from django.utils.dateparse import parse_datetime
-            start = parse_datetime(request.data['start_time'])
-            end   = parse_datetime(request.data['end_time'])
-            duration = int((end - start).total_seconds() / 60)
-            lesson = Lesson.objects.create(
-                tutor=tutor, student=student,
-                subject_id=request.data.get('subject') or None,
-                lesson_type=request.data.get('lesson_type','regular'),
-                start_time=start, end_time=end, duration_minutes=duration,
-                price=request.data.get('price',0), currency=request.data.get('currency','GHS'),
-                record_session=request.data.get('record_session',True),
-                topic=request.data.get('topic',''), status='confirmed', payment_status='pending',
-                booked_on_behalf=request.data.get('booked_on_behalf',False),
-                booker_name=request.data.get('booker_name',''),
-                booker_relationship=request.data.get('booker_relationship',''),
-                booker_phone=request.data.get('booker_phone',''),
-                booker_email=request.data.get('booker_email',''),
-                notes=request.data.get('notes',''),
+            # -----------------------------------------
+            # Get tutor
+            # -----------------------------------------
+            tutor_id = request.data.get("tutor")
+
+            if not tutor_id:
+                return Response(
+                    {
+                        "error": "Tutor is required.",
+                        "field": "tutor",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            tutor = (
+                User.objects
+                .filter(
+                    id=tutor_id,
+                    role="tutor",
+                )
+                .first()
             )
+
+            if not tutor:
+                return Response(
+                    {
+                        "error": "Tutor account was not found.",
+                        "field": "tutor",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # -----------------------------------------
+            # Determine student
+            # -----------------------------------------
+            student = request.user
+
+            booked_on_behalf = self._to_bool(
+                request.data.get(
+                    "booked_on_behalf",
+                    False
+                )
+            )
+
+            if booked_on_behalf:
+
+                learner_email = (
+                    request.data.get(
+                        "learner_email",
+                        ""
+                    )
+                    .strip()
+                    .lower()
+                )
+
+                if not learner_email:
+                    return Response(
+                        {
+                            "error": (
+                                "Learner email is required "
+                                "when booking on behalf."
+                            ),
+                            "field": "learner_email",
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                learner = (
+                    User.objects
+                    .filter(
+                        email__iexact=learner_email,
+                        role="student",
+                    )
+                    .first()
+                )
+
+                if not learner:
+                    return Response(
+                        {
+                            "error": (
+                                "Learner student account "
+                                "was not found."
+                            ),
+                            "field": "learner_email",
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                student = learner
+
+            # -----------------------------------------
+            # Dates
+            # -----------------------------------------
+            start_time = request.data.get("start_time")
+            end_time = request.data.get("end_time")
+
+            if not start_time:
+                return Response(
+                    {
+                        "error": "Start time is required.",
+                        "field": "start_time",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if not end_time:
+                return Response(
+                    {
+                        "error": "End time is required.",
+                        "field": "end_time",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            start = parse_datetime(start_time)
+            end = parse_datetime(end_time)
+
+            if start is None:
+                return Response(
+                    {
+                        "error": "Invalid start_time format.",
+                        "field": "start_time",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if end is None:
+                return Response(
+                    {
+                        "error": "Invalid end_time format.",
+                        "field": "end_time",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Make naive datetimes timezone-aware
+            if timezone.is_naive(start):
+                start = timezone.make_aware(start)
+
+            if timezone.is_naive(end):
+                end = timezone.make_aware(end)
+
+            if end <= start:
+                return Response(
+                    {
+                        "error": (
+                            "End time must be later "
+                            "than start time."
+                        ),
+                        "field": "end_time",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            duration = int(
+                (end - start).total_seconds() / 60
+            )
+
+            if duration <= 0:
+                return Response(
+                    {
+                        "error": "Lesson duration must be greater than zero."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # -----------------------------------------
+            # Subject
+            # -----------------------------------------
+            subject_id = request.data.get("subject")
+
+            if subject_id in ("", None, "null"):
+                subject_id = None
+            else:
+                try:
+                    subject_id = int(subject_id)
+                except (TypeError, ValueError):
+                    return Response(
+                        {"error": "Invalid subject.", "field": "subject"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                if not tutor.tutor_profile.subjects.filter(pk=subject_id).exists():
+                    return Response(
+                        {
+                            "error": "The selected subject is not offered by this tutor.",
+                            "field": "subject",
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            # -----------------------------------------
+            # Price
+            # -----------------------------------------
+            price = request.data.get("price", 0)
+
+            if price in ("", None):
+                price = 0
+
+            # -----------------------------------------
+            # Create lesson
+            # -----------------------------------------
+            lesson = Lesson.objects.create(
+                tutor=tutor,
+                student=student,
+
+                subject_id=subject_id,
+
+                lesson_type=request.data.get(
+                    "lesson_type",
+                    "regular",
+                ),
+
+                start_time=start,
+                end_time=end,
+                duration_minutes=duration,
+
+                topic=request.data.get(
+                    "topic",
+                    "",
+                ),
+
+                price=price,
+
+                currency=request.data.get(
+                    "currency",
+                    "GHS",
+                ),
+
+                record_session=self._to_bool(
+                    request.data.get(
+                        "record_session",
+                        True,
+                    )
+                ),
+
+                status="pending",
+                payment_status="pending",
+
+                booked_on_behalf=booked_on_behalf,
+
+                booker_name=request.data.get(
+                    "booker_name",
+                    "",
+                ),
+
+                booker_relationship=request.data.get(
+                    "booker_relationship",
+                    "",
+                ),
+
+                booker_phone=request.data.get(
+                    "booker_phone",
+                    "",
+                ),
+
+                booker_email=request.data.get(
+                    "booker_email",
+                    "",
+                ),
+
+                notes=request.data.get(
+                    "notes",
+                    "",
+                ),
+            )
+
+            # -----------------------------------------
+            # Notifications
+            # -----------------------------------------
             try:
-                from apps.messaging.guppy import notify_lesson_booked
+                from apps.messaging.guppy import (
+                    notify_lesson_booked
+                )
+
                 notify_lesson_booked(lesson)
-            except Exception: pass
-            d = LessonSerializer(lesson).data
-            d['can_join'] = False
-            return Response(d, status=201)
+
+            except Exception as notification_error:
+                print(
+                    "Lesson notification failed:",
+                    notification_error
+                )
+
+            # -----------------------------------------
+            # Response
+            # -----------------------------------------
+            lesson = (
+                Lesson.objects
+                .select_related(
+                    "tutor",
+                    "student",
+                    "subject",
+                )
+                .get(pk=lesson.pk)
+            )
+
+            data = LessonSerializer(lesson).data
+
+            data["can_join"] = False
+
+            return Response(
+                data,
+                status=status.HTTP_201_CREATED,
+            )
+
         except Exception as e:
-            return Response({'error': str(e)}, status=400)
+            # Print the real error in development
+            import traceback
+
+            traceback.print_exc()
+
+            return Response(
+                {
+                    "error": str(e),
+                    "type": e.__class__.__name__,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    @staticmethod
+    def _to_bool(value):
+        """
+        Safely convert frontend boolean values.
+        """
+
+        if isinstance(value, bool):
+            return value
+
+        if value is None:
+            return False
+
+        if isinstance(value, str):
+            return value.strip().lower() in (
+                "true",
+                "1",
+                "yes",
+                "on",
+            )
+
+        if isinstance(value, int):
+            return value == 1
+
+        return bool(value)
 
 class LessonDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -83,7 +513,11 @@ class LessonDetailView(APIView):
                 return Response({'error':'Forbidden.'}, status=403)
             d = LessonSerializer(l).data
             now = timezone.now()
-            d['can_join'] = now >= (l.start_time - timedelta(minutes=10)) and l.status in ('confirmed','in_progress')
+            d['can_join'] = (
+                now >= (l.start_time - timedelta(minutes=10))
+                and l.status in ('confirmed', 'in_progress')
+                and l.payment_status == 'paid'
+            )
             return Response(d)
         except Lesson.DoesNotExist:
             return Response({'error':'Not found.'}, status=404)
@@ -96,6 +530,10 @@ def join_lesson(request, pk):
         l = Lesson.objects.get(pk=pk)
         if request.user not in [l.tutor, l.student]:
             return Response({'error':'Not your lesson.'}, status=403)
+        if l.payment_status != 'paid':
+            return Response({'error': 'Payment is required before joining this lesson.'}, status=402)
+        if l.status not in ('confirmed', 'in_progress'):
+            return Response({'error': 'This lesson is not ready to join.'}, status=400)
         bbb_url    = dj_settings.BBB_URL
         bbb_secret = dj_settings.BBB_SECRET
         if not bbb_url or not bbb_secret:
@@ -121,6 +559,11 @@ def end_lesson(request, pk):
         if request.user != l.tutor and request.user.role not in ('admin','staff'):
             return Response({'error':'Only the tutor can end the lesson.'}, status=403)
         l.status = 'completed'; l.save(update_fields=['status'])
+        try:
+            from apps.gamification.services import record_completed_lesson
+            record_completed_lesson(l)
+        except Exception:
+            pass
         try:
             from apps.scheduling.tasks import generate_ai_summary
             generate_ai_summary.delay(l.id)
@@ -153,4 +596,4 @@ def lesson_recordings(request, pk):
         if l.recording_url: recs.append({'playback_url':l.recording_url,'duration':l.duration_minutes})
         return Response({'recordings':recs})
     except Lesson.DoesNotExist:
-        return Response({'error':'Not found.'}, status=404)
+        return Response({'error': 'Not found.'}, status=404)

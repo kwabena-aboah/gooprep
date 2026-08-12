@@ -20,8 +20,22 @@ class BBBService:
     """
 
     def __init__(self):
-        self.base_url = (getattr(settings, 'BBB_URL', '') or '').rstrip('/') + '/'
-        self.secret = getattr(settings, 'BBB_SECRET', '') or ''
+        configured_url = (getattr(settings, 'BBB_URL', '') or '').strip()
+        self.base_url = self._normalize_base_url(configured_url)
+        self.secret = (getattr(settings, 'BBB_SECRET', '') or '').strip()
+
+    @staticmethod
+    def _normalize_base_url(url):
+        """Return the BBB API base URL used by all API calls."""
+        if not url:
+            return ''
+        url = url.rstrip('/') + '/'
+        if url.lower().endswith('/bigbluebutton/api/'):
+            return url
+        if '/bigbluebutton/' in url.lower():
+            prefix = url[:url.lower().index('/bigbluebutton/') + len('/bigbluebutton/')]
+            return prefix + 'api/'
+        return url
 
     @property
     def configured(self):
@@ -32,9 +46,9 @@ class BBBService:
     # ------------------------------------------------------------------ #
 
     def _checksum(self, api_call: str, params: str) -> str:
-        """Generate SHA-256 checksum for BBB API authentication."""
+        """Generate the SHA-1 checksum required by BBB API v2."""
         raw = api_call + params + self.secret
-        return hashlib.sha256(raw.encode('utf-8')).hexdigest()
+        return hashlib.sha1(raw.encode('utf-8')).hexdigest()
 
     def _build_url(self, api_call: str, params: dict) -> str:
         """Build a signed BBB API URL."""

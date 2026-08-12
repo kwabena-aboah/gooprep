@@ -182,6 +182,13 @@ async function askAI() {
 onMounted(async () => {
   try {
     await auth.fetchMe()
+    const activity = await apiPost('/gamification/activity/')
+    if (activity.data) {
+      auth.user.total_points = activity.data.total
+      auth.user.level = activity.data.level
+      auth.user.streak_days = activity.data.streak
+      localStorage.setItem('gp_user', JSON.stringify(auth.user))
+    }
     const [lessons, badgeData] = await Promise.all([
       apiGet('/scheduling/lessons/', { ordering: '-start_time', page_size: 20 }),
       apiGet('/gamification/badges/'),

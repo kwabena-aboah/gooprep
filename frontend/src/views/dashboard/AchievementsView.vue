@@ -171,12 +171,17 @@ async function fetchLB() {
 
 onMounted(async () => {
   try {
+    await apiPost('/gamification/activity/')
     const [b, pts] = await Promise.all([
       apiGet('/gamification/badges/'),
       apiGet('/gamification/points/'),
     ])
     badges.value  = b.data || []
     history.value = pts.data?.history || []
+    auth.user.total_points = pts.data?.total ?? auth.user.total_points
+    auth.user.level = pts.data?.level ?? auth.user.level
+    auth.user.streak_days = pts.data?.streak ?? auth.user.streak_days
+    localStorage.setItem('gp_user', JSON.stringify(auth.user))
     await fetchLB()
   } catch (e) { console.error(e) }
   finally { loading.value = false }

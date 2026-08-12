@@ -66,5 +66,5 @@ const colors=['#ef4444','#f59e0b','#3b82f6','#10b981']
 const labels=['Very weak','Weak','Good','Strong']
 const strengthColor=computed(()=>colors[strength.value-1])
 const strengthLabel=computed(()=>labels[strength.value-1])
-async function submit(){const{ok,role}=await auth.register(form.value);if(ok)router.push(role==='tutor'?'/tutor-onboarding':'/dashboard')}
+async function submit(){const selectedRole=form.value.role;const{ok}=await auth.register(form.value);if(ok)router.push(selectedRole==='tutor'?'/tutor-onboarding':selectedRole==='student'?'/student-onboarding':'/dashboard')}
 </script>

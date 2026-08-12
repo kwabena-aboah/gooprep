@@ -40,6 +40,23 @@ class RegisterTestCase(TestCase):
         self.assertIn('access', resp.data)
         self.assertIn('user', resp.data)
         self.assertEqual(resp.data['user']['role'], 'student')
+        from apps.students.models import StudentProfile
+        profile = StudentProfile.objects.get(user__email='student@test.com')
+        self.assertTrue(profile.needs_approval)
+        self.assertFalse(profile.is_approved)
+
+    def test_student_appears_in_admin_approval_queue(self):
+        self.client.post('/api/auth/register/', {
+            'email': 'queued@test.com', 'username': 'queued1',
+            'first_name': 'Queued', 'last_name': 'Student',
+            'password': 'Test@1234', 'password2': 'Test@1234',
+            'role': 'student',
+        }, format='json')
+        admin = make_user('queueadmin@test.com', role='admin', is_staff=True, is_superuser=True)
+        client = auth_client(admin)
+        response = client.get('/api/admin-panel/students/?approval_status=pending')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(any(item['email'] == 'queued@test.com' for item in response.data['results']))
 
     def test_register_with_referral(self):
         resp = self.client.post('/api/auth/register/', {
@@ -273,7 +290,8 @@ class LessonTestCase(TestCase):
         c    = auth_client(self.student)
         resp = self._book(c)
         self.assertEqual(resp.status_code, 201)
-        self.assertEqual(resp.data['status'], 'confirmed')
+        self.assertEqual(resp.data['status'], 'pending')
+        self.assertEqual(resp.data['payment_status'], 'pending')
 
     def test_book_on_behalf(self):
         parent  = make_user('parent@test.com')

@@ -31,7 +31,7 @@
             <div class="text-white-50 small">Version</div>
           </div>
         </div>
-        <div class="mt-3 small text-white-50">Server URL: {{ status.url || 'Not configured' }}</div>
+        <div class="mt-3 small text-white-50">Server URL: {{ status.url || status.server_url || 'Not configured' }}</div>
       </div>
 
       <!-- Active meetings -->
@@ -109,13 +109,24 @@ async function fetch() {
     const [s, r, rec] = await Promise.all([
       apiGet('/admin-panel/bbb/status/'),
       apiGet('/admin-panel/bbb/rooms/'),
-      apiGet('/admin-panel/bbb/recordings/'), 
+      apiGet('/admin-panel/bbb/recordings/'),
     ])
-    status.value     = s.data || {}
-    rooms.value      = r.data?.meetings || []
+    status.value = s.data || {}
+    rooms.value = r.data?.meetings || []
     recordings.value = rec.data?.recordings || []
-  } catch { status.value = { online: false } }
-  finally { loading.value = false }
+  } catch (error) {
+    status.value = {
+      online: false,
+      configured: false,
+      url: '',
+      error: error.response?.data?.error || 'Unable to load BBB data.',
+    }
+    rooms.value = []
+    recordings.value = []
+    notifStore.toast(status.value.error, 'error')
+  } finally {
+    loading.value = false
+  }
 }
 
 async function endMeeting(meetingID, pw) {

@@ -55,6 +55,12 @@
                 <i class="bi bi-camera-video text-success"></i>BBB Status
                 <span class="badge ms-auto" :class="bbbOnline?'bg-success':'bg-danger'">{{ bbbOnline?'Online':'Offline' }}</span>
               </RouterLink>
+              <RouterLink to="/admin/exports" class="btn btn-outline-secondary btn-sm text-start d-flex align-items-center gap-2">
+                <i class="bi bi-file-earmark-arrow-down text-gp-primary"></i>Export Reports
+              </RouterLink>
+              <RouterLink to="/admin/referrals" class="btn btn-outline-secondary btn-sm text-start d-flex align-items-center gap-2">
+                <i class="bi bi-share text-gp-primary"></i>Referrals
+              </RouterLink>
             </div>
           </div>
         </div>

@@ -45,6 +45,7 @@
         <RouterLink class="sidebar-link" :class="{active:route.path==='/admin'}" to="/admin"><i class="bi bi-graph-up-arrow"></i>Overview</RouterLink>
         <RouterLink class="sidebar-link" :class="{active:isActive('/admin/tutors')}" to="/admin/tutors"><i class="bi bi-person-badge"></i>Tutor Approvals</RouterLink>
         <RouterLink class="sidebar-link" :class="{active:isActive('/admin/users')}" to="/admin/users"><i class="bi bi-people-fill"></i>Users</RouterLink>
+        <RouterLink class="sidebar-link" :class="{active:isActive('/admin/students')}" to="/admin/students"><i class="bi bi-mortarboard"></i>Student Approvals</RouterLink>
         <RouterLink class="sidebar-link" :class="{active:isActive('/admin/revenue')}" to="/admin/revenue"><i class="bi bi-currency-dollar"></i>Revenue</RouterLink>
         <RouterLink class="sidebar-link" :class="{active:isActive('/admin/disputes')}" to="/admin/disputes"><i class="bi bi-exclamation-triangle"></i>Disputes</RouterLink>
         <RouterLink class="sidebar-link" :class="{active:isActive('/admin/bbb')}" to="/admin/bbb"><i class="bi bi-camera-video"></i>BBB Rooms</RouterLink>

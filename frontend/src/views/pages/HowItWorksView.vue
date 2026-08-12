@@ -48,7 +48,7 @@
           <div class="gp-card p-4" style="background:linear-gradient(135deg,#0a0a0a,#1a0800)">
             <div class="text-center text-white mb-3">
               <div class="fw-800 fs-1" style="color:var(--gp-amber)">GHS 40–120</div>
-              <div class="text-white-50">per hour · you keep 85%</div>
+              <div class="text-white-50">per hour · you keep 80%</div>
             </div>
             <div v-for="f in tutorFeats" :key="f" class="d-flex align-items-center gap-2 mb-2 text-white-50 small">
               <i class="bi bi-check-circle-fill text-success"></i>{{ f }}
@@ -76,11 +76,11 @@ const studentSteps = [
   { title:'Create a free account',   desc:'Sign up in under 2 minutes as a student or institution.' },
   { title:'Browse & filter tutors',  desc:'Search by subject, price, rating, or availability.' },
   { title:'Book your first session', desc:'Choose a time, pay securely with mobile money or card.' },
-  { title:'Join the classroom',      desc:'Click Join to enter your live BigBlueButton session.' },
+  { title:'Join the classroom',      desc:'Click Join to enter your live Gooprep Virtual Room session.' },
 ]
 const studentFeats = [
   { icon:'bi bi-search',            color:'#e63900', label:'Smart Tutor Matching',  desc:'AI-powered recommendations based on your goals' },
-  { icon:'bi bi-camera-video-fill', color:'#6366f1', label:'Live HD Classrooms',   desc:'BigBlueButton with whiteboard and screen sharing' },
+  { icon:'bi bi-camera-video-fill', color:'#6366f1', label:'Live HD Classrooms',   desc:'Gooprep Virtual Room with whiteboard and screen sharing' },
   { icon:'bi bi-robot',             color:'#10b981', label:'AI Study Assistant',   desc:'Instant homework help and lesson summaries' },
   { icon:'bi bi-trophy',            color:'#f59e0b', label:'Gamified Learning',    desc:'Earn XP, badges, and maintain streaks' },
 ]
@@ -91,7 +91,7 @@ const tutorSteps = [
   { title:'Earn & get paid',  desc:'Receive payouts to MoMo or bank within 2 business days.' },
 ]
 const tutorFeats = [
-  'Keep 85% of every lesson fee','Instant or scheduled bookings',
+  'Keep 80% of every lesson fee','Instant or scheduled bookings',
   'Automatic lesson recordings','AI-generated lesson summaries',
   'WhatsApp notifications','Payout to MTN MoMo or bank',
 ]

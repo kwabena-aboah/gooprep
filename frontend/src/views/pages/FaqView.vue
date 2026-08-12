@@ -50,12 +50,12 @@ const faqs = [
   { cat:'Students', q:'What happens if a tutor cancels?',  a:'You receive a full refund to your original payment method within 1–3 business days. You can also reschedule at no extra cost.' },
   { cat:'Students', q:'Are sessions recorded?',            a:'Yes, by default sessions are recorded and available in your lesson history within 1 hour of completion.' },
   { cat:'Tutors',   q:'How do I become a tutor?',          a:'Sign up, select "I want to Teach", and complete the onboarding form. Our team reviews applications within 24–48 hours.' },
-  { cat:'Tutors',   q:'How much can I earn?',              a:'Tutors set their own rates (GHS 20–200+/hr). Gooprep takes a 15% platform fee. Top tutors earn GHS 3,000–10,000/month.' },
+  { cat:'Tutors',   q:'How much can I earn?',              a:'Tutors set their own rates (GHS 20–200+/hr). Gooprep takes a 20% platform fee. Top tutors earn GHS 3,000–10,000/month.' },
   { cat:'Tutors',   q:'When do I get paid?',               a:'Request a payout anytime (minimum GHS 50). Funds arrive in your MoMo or bank account within 1–2 business days.' },
   { cat:'Payments', q:'What payment methods are accepted?', a:'MTN MoMo, AirtelTigo Money, Telecel Cash, and Visa/Mastercard. All payments are processed by Paystack.' },
   { cat:'Payments', q:'Is my money safe?',                  a:'Yes. Payments are held in escrow and only released to the tutor 24 hours after lesson completion, giving you time to raise disputes.' },
   { cat:'Payments', q:'How do I get a refund?',            a:'Contact support within 48 hours of the lesson. Approved refunds are returned to your original payment method within 3 business days.' },
-  { cat:'Technical',q:'What do I need for a lesson?',      a:'A stable internet connection, camera, and microphone. Sessions run in your browser — no downloads needed (BigBlueButton is web-based).' },
+  { cat:'Technical',q:'What do I need for a lesson?',      a:'A stable internet connection, camera, and microphone. Sessions run in your browser — no downloads needed (Gooprep Virtual Classroom is web-based).' },
   { cat:'Technical',q:'Is there a mobile app?',            a:'Gooprep is fully mobile-responsive and works great on any mobile browser. A dedicated app is coming soon.' },
 ]
 

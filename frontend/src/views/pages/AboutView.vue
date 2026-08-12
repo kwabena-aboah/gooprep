@@ -37,8 +37,8 @@
         </div>
       </div>
       <div class="gp-card p-4 p-md-5 text-center" style="background:linear-gradient(135deg,#111,#1a0800)">
-        <h3 class="text-white fw-800 mb-2">Built in Ghana 🇬🇭</h3>
-        <p class="text-white-50 mb-4">Gooprep is proudly built by <strong class="text-white">Sikaba Systems</strong>, a Ghanaian software company dedicated to building digital solutions for the African market.</p>
+        <h3 class="text-white fw-800 mb-2">Built in Ghana</h3>
+        <p class="text-white-50 mb-4">Gooprep is proudly built by <strong class="text-white">Gooprep Team</strong>.</p>
         <RouterLink to="/register" class="btn btn-gp px-5">Join Gooprep Today</RouterLink>
       </div>
     </div>

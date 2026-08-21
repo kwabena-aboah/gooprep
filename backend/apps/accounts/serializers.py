@@ -16,7 +16,7 @@ class UserSerializer(serializers.ModelSerializer):
             'avatar','avatar_url','city','country','timezone','language','subscription_plan',
             'total_points','level','streak_days','notify_email','notify_sms',
             'notify_push','notify_whatsapp','date_joined','last_login','is_active',
-            'was_referred','referrer_name','referrer_notes',
+            'was_referred','referrer_name','referrer_notes','email_verified',
         ]
         read_only_fields = ['id','email','role','avatar_url','date_joined','last_login',
                             'total_points','level','streak_days']

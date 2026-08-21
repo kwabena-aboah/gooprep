@@ -31,6 +31,14 @@
             <div class="col-3"><div class="fw-700">{{ t.certifications?.length||0 }}</div><div class="text-muted" style="font-size:.7rem">Certs</div></div>
           </div>
           <div v-if="t.bio" class="text-muted small mb-3 p-2 rounded-3" style="background:#f8fafc;max-height:80px;overflow:hidden">{{ t.bio }}</div>
+          <div class="border rounded-3 p-2 mb-3">
+            <div class="small fw-700 mb-1"><i class="bi bi-file-earmark-check me-1"></i>Verification documents</div>
+            <div v-if="!(t.verification_documents||[]).length" class="small text-muted">No documents uploaded.</div>
+            <div v-for="doc in (t.verification_documents||[])" :key="doc.id" class="d-flex justify-content-between align-items-center small mb-1">
+              <span class="text-truncate me-2">{{ doc.doc_label }} · {{ doc.file_name }}</span>
+              <a class="btn btn-sm btn-outline-primary py-0" :href="doc.file_url" target="_blank" rel="noopener"><i class="bi bi-eye me-1"></i>Preview</a>
+            </div>
+          </div>
           <div v-if="t.approval_status==='pending'" class="d-flex gap-2">
             <button class="btn btn-success btn-sm flex-grow-1" @click="decide(t,'approved')">
               <span v-if="deciding===t.id+'a'" class="spinner-border spinner-border-sm"></span>

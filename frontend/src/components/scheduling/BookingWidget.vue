@@ -594,7 +594,10 @@
     </button>
 
 
-    <!-- Security/help text -->
+    <!-- VirtualClassRoom/help text -->
+    <div class="text-center text-muted small mt-2">
+      <i class="bi bi-camera-video me-1"></i>Lessons take place in VirtualClassRoom.
+    </div>
     <div class="text-center text-muted small mt-2">
 
       <i class="bi bi-shield-check me-1"></i>

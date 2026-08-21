@@ -694,7 +694,7 @@
 
             </div>
 
-            <!-- BigBlueButton -->
+            <!-- VirtualClassRoom -->
             <div
               class="gp-card-flat p-3"
               style="background:var(--gp-surface)"
@@ -711,7 +711,7 @@
                   "
                 ></i>
 
-                Live via BigBlueButton
+                Live via VirtualClassRoom
 
               </div>
 
@@ -1496,26 +1496,29 @@ async function loadTutorProfile() {
 
   try {
 
-    const tutorId =
-      route.params.id
+    const tutorId = route.params.id
+    const tutorSlug = route.params.slug
+    const profilePath = tutorSlug
+      ? `/tutors/slug/${encodeURIComponent(tutorSlug)}/`
+      : tutorId
+        ? `/tutors/${tutorId}/`
+        : ''
 
-    if (!tutorId) {
-      throw new Error(
-        'Tutor ID is missing from the URL.'
-      )
+    if (!profilePath) {
+      throw new Error('Tutor ID or slug is missing from the URL.')
     }
 
-    /*
-     * Load tutor profile first.
-     */
-
-    const profileResponse =
-      await apiGet(
-        `/tutors/${tutorId}/`
-      )
+    /* Load the saved public profile, whether opened by ID or slug. */
+    const profileResponse = await apiGet(profilePath)
 
     profile.value =
       profileResponse?.data || null
+
+    // The profile serializer already includes availability. Use it immediately
+    // and then refresh from the public availability endpoint below.
+    availability.value = Array.isArray(profile.value?.availability)
+      ? profile.value.availability
+      : []
 
     if (!profile.value) {
       return
@@ -1590,14 +1593,19 @@ async function loadTutorProfile() {
       const data =
         availabilityResponse.value?.data
 
-      availability.value =
-        Array.isArray(data)
-          ? data
-          : (
-              Array.isArray(data?.results)
-                ? data.results
-                : []
-            )
+      availability.value = Array.isArray(data)
+        ? data
+        : (Array.isArray(data?.availability) ? data.availability : [])
+      if (profile.value && data && !Array.isArray(data)) {
+        profile.value = {
+          ...profile.value,
+          availability: availability.value,
+          blocked_dates: data.blocked_dates || [],
+          min_notice_hours: data.min_notice_hours ?? profile.value.min_notice_hours,
+          max_daily_bookings: data.max_daily_bookings ?? profile.value.max_daily_bookings,
+          booking_buffer_minutes: data.booking_buffer_minutes ?? profile.value.booking_buffer_minutes,
+        }
+      }
 
     } else {
 

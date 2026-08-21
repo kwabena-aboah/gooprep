@@ -72,12 +72,16 @@ class SiteSettingsView(APIView):
             'whatsapp_api_token','whatsapp_phone_id','google_maps_api_key',
             'cloudflare_account_id','cloudflare_access_key','cloudflare_secret_key','cloudflare_bucket',
             'openai_api_key','guppy_app_id','guppy_api_key','guppy_webhook_secret',
-            'bbb_url','bbb_secret',
+            'bbb_url','bbb_secret','bbb_key',
             'commission_rate','min_payout','escrow_release_hours','cancellation_hours',
             'ai_enabled','whatsapp_enabled','group_classes_enabled',
             'institutions_enabled','trials_enabled','gamification_enabled','guppy_enabled',
         ]
         for field in safe_fields:
+            if field == 'bbb_key':
+                if 'bbb_key' in request.data:
+                    s.bbb_secret = request.data['bbb_key']
+                continue
             if field in request.data:
                 setattr(s, field, request.data[field])
         # Handle logo upload
@@ -91,8 +95,11 @@ class SiteSettingsView(APIView):
     def _sync_settings(self, s):
         """Push DB settings to Django runtime settings."""
         from django.conf import settings as dj
-        if s.bbb_url:        dj.BBB_URL    = s.bbb_url
-        if s.bbb_secret:     dj.BBB_SECRET = s.bbb_secret
+        if s.bbb_url:
+            dj.BBB_URL = s.bbb_url
+        if s.bbb_secret:
+            dj.BBB_KEY = s.bbb_secret
+            dj.BBB_SECRET = s.bbb_secret
         if s.guppy_api_key:  dj.GUPPY_API_KEY = s.guppy_api_key
         if s.guppy_app_id:   dj.GUPPY_APP_ID  = s.guppy_app_id
         if s.guppy_webhook_secret: dj.GUPPY_WEBHOOK_SECRET = s.guppy_webhook_secret

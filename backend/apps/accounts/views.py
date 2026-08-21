@@ -8,7 +8,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import get_user_model
 from django.core.mail import send_mail
 from django.conf import settings
-from .models import Notification, PasswordResetToken
+from .models import Notification, PasswordResetToken, EmailVerificationToken
 from .serializers import RegisterSerializer, UserSerializer, NotificationSerializer, CustomTokenObtainPairSerializer
 
 User = get_user_model()
@@ -32,8 +32,22 @@ class RegisterView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
+        self._send_verification_email(user)
         refresh = RefreshToken.for_user(user)
         return Response({'access': str(refresh.access_token), 'refresh': str(refresh), 'user': UserSerializer(user).data}, status=201)
+
+
+    @staticmethod
+    def _send_verification_email(user):
+        token = EmailVerificationToken.objects.create(user=user, token=uuid.uuid4().hex)
+        verify_url = f'{settings.FRONTEND_URL}/verify-email?token={token.token}'
+        send_mail(
+            'Verify your Gooprep email address',
+            f'Welcome to Gooprep! Verify your email within 24 hours: {verify_url}',
+            settings.DEFAULT_FROM_EMAIL,
+            [user.email],
+            fail_silently=False,
+        )
 
 
 class LogoutView(APIView):
@@ -93,6 +107,31 @@ def mark_notifications_read(request):
     if request.data.get('ids'):
         queryset = queryset.filter(id__in=request.data['ids'])
     return Response({'marked': queryset.update(is_read=True)})
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def verify_email(request):
+    token_value = request.query_params.get('token', '')
+    token = EmailVerificationToken.objects.filter(token=token_value).select_related('user').first()
+    if not token or not token.is_valid():
+        return Response({'error': 'This verification link is invalid or expired.'}, status=400)
+    token.used = True
+    token.save(update_fields=['used'])
+    token.user.email_verified = True
+    token.user.save(update_fields=['email_verified'])
+    return Response({'verified': True, 'detail': 'Email verified successfully.'})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def resend_verification_email(request):
+    if request.user.email_verified:
+        return Response({'detail': 'Email is already verified.'})
+    token = EmailVerificationToken.objects.create(user=request.user, token=uuid.uuid4().hex)
+    verify_url = f'{settings.FRONTEND_URL}/verify-email?token={token.token}'
+    send_mail('Verify your Gooprep email address', f'Verify your email within 24 hours: {verify_url}', settings.DEFAULT_FROM_EMAIL, [request.user.email], fail_silently=False)
+    return Response({'sent': True})
 
 
 @api_view(['POST'])

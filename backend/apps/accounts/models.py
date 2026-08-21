@@ -32,6 +32,7 @@ class User(AbstractUser):
     was_referred    = models.BooleanField(default=False)
     referrer_name   = models.CharField(max_length=200, blank=True)
     referrer_notes  = models.CharField(max_length=500, blank=True)
+    email_verified  = models.BooleanField(default=False)
 
     USERNAME_FIELD  = 'email'
     REQUIRED_FIELDS = ['username']
@@ -43,6 +44,17 @@ class User(AbstractUser):
         if self.avatar:
             return self.avatar.url
         return self.avatar_url or f'https://ui-avatars.com/api/?name={self.get_full_name() or self.email}&background=e63900&color=fff'
+
+class EmailVerificationToken(models.Model):
+    user       = models.ForeignKey(User, on_delete=models.CASCADE, related_name='email_verification_tokens')
+    token      = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    used       = models.BooleanField(default=False)
+
+    def is_valid(self):
+        from datetime import timedelta
+        return not self.used and (timezone.now() - self.created_at) < timedelta(hours=24)
+
 
 class Notification(models.Model):
     TYPES = [

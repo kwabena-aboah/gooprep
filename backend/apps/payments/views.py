@@ -14,7 +14,16 @@ from .serializers import TransactionSerializer, SubscriptionSerializer, PayoutSe
 class TransactionListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     def get(self, request):
-        qs = Transaction.objects.filter(payer=request.user).order_by('-created_at')
+        # Students see payments they made; tutors see payments for their lessons.
+        # select_related keeps the earnings table from issuing one query per row.
+        if getattr(request.user, 'role', '') == 'tutor':
+            qs = Transaction.objects.filter(lesson__tutor=request.user).select_related(
+                'payer', 'lesson__subject'
+            ).order_by('-created_at')
+        else:
+            qs = Transaction.objects.filter(payer=request.user).select_related(
+                'payer', 'lesson__subject'
+            ).order_by('-created_at')
         page_size = int(request.query_params.get('page_size',20))
         page = int(request.query_params.get('page',1))
         total = qs.count()
@@ -35,8 +44,19 @@ class PayoutListView(APIView):
             return Response({'error':f'Minimum payout is GHS {settings.MIN_PAYOUT}.'}, status=400)
         if float(tp.pending_payout) < amount:
             return Response({'error':'Insufficient balance.'}, status=400)
+        # pending_payout is already the tutor's post-commission balance. Do not
+        # deduct a second time; record the gross equivalent and commission for
+        # a transparent payout audit trail.
+        commission_rate = float(settings.PLATFORM_COMMISSION)
+        gross_equivalent = amount / (1 - commission_rate)
+        details = {
+            **(request.data.get('details', {}) or {}),
+            'commission_rate': commission_rate,
+            'gross_equivalent': round(gross_equivalent, 2),
+            'commission_amount': round(gross_equivalent - amount, 2),
+        }
         payout = Payout.objects.create(tutor=request.user, amount=amount,
-            method=request.data.get('method','mtn_momo'), details=request.data.get('details',{}))
+            method=request.data.get('method','mtn_momo'), details=details)
         tp.pending_payout = float(tp.pending_payout) - amount
         tp.save(update_fields=['pending_payout'])
         try:

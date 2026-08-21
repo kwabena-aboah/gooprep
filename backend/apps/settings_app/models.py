@@ -43,7 +43,7 @@ class SiteSettings(models.Model):
     bbb_url              = models.URLField(blank=True)
     bbb_secret           = models.CharField(max_length=200, blank=True)
     # Financial
-    commission_rate     = models.DecimalField(max_digits=4, decimal_places=2, default=15)
+    commission_rate     = models.DecimalField(max_digits=4, decimal_places=2, default=20)
     min_payout          = models.DecimalField(max_digits=8, decimal_places=2, default=50)
     escrow_release_hours = models.IntegerField(default=24)
     cancellation_hours  = models.IntegerField(default=24)

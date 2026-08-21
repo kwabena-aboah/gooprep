@@ -36,7 +36,7 @@
                 <td class="small text-muted">{{ fmtDate(t.created_at) }}</td>
                 <td class="small">{{ t.payer_name }}</td>
                 <td class="fw-700">GHS {{ t.amount }}</td>
-                <td class="text-success small">GHS {{ (parseFloat(t.amount)*0.15).toFixed(2) }}</td>
+                <td class="text-success small">GHS {{ (parseFloat(t.amount)*PLATFORM_COMMISSION).toFixed(2) }}</td>
                 <td class="small">{{ methodLabel(t.payment_method) }}</td>
                 <td><span class="badge small" :class="t.status==='success'?'bg-success-subtle text-success':'bg-warning-subtle text-warning'">{{ t.status }}</span></td>
               </tr>
@@ -49,6 +49,7 @@
 </template>
 <script setup>
 import { ref, onMounted } from 'vue'
+import { PLATFORM_COMMISSION } from '@/utils/platform'
 import { apiGet } from '@/utils/api'
 import { fmtDate, methodLabel } from '@/utils/helpers'
 import GpSpinner from '@/components/common/GpSpinner.vue'

@@ -74,7 +74,7 @@ const isPublicRoute = computed(() =>
 )
 
 const isPublicLayout = computed(() => {
-  const authenticatedShellRoutes = ['group-classes', 'tutor-search']
+  const authenticatedShellRoutes = ['group-classes', 'tutor-search', 'tutor-profile']
   const useAuthenticatedShell =
     authStore.isAuthenticated && authenticatedShellRoutes.includes(route.name)
 

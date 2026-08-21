@@ -41,8 +41,8 @@
           <h5 class="fw-700 mb-4"><i class="bi bi-camera-video me-2 text-gp-primary"></i>BigBlueButton</h5>
           <div class="row g-3">
             <div class="col-12"><label class="form-label small fw-600">BBB Server URL</label><input class="form-control" v-model="s.bbb_url" /></div>
-            <div class="col-12"><label class="form-label small fw-600">BBB Shared Secret</label>
-              <div class="input-group"><input :type="showSecret?'text':'password'" class="form-control" v-model="s.bbb_secret" /><button class="btn btn-outline-secondary" @click="showSecret=!showSecret"><i class="bi" :class="showSecret?'bi-eye-slash':'bi-eye'"></i></button></div>
+            <div class="col-12"><label class="form-label small fw-600">BBB Key</label>
+              <div class="input-group"><input :type="showSecret?'text':'password'" class="form-control" v-model="s.bbb_key" /><button class="btn btn-outline-secondary" @click="showSecret=!showSecret"><i class="bi" :class="showSecret?'bi-eye-slash':'bi-eye'"></i></button></div>
             </div>
             <div class="col-12 d-flex gap-2">
               <button class="btn btn-outline-primary btn-sm" @click="testBBB" :disabled="testingBBB">
@@ -143,8 +143,8 @@ async function save() {
 async function testBBB() {
   testingBBB.value = true; bbbResult.value = null
   try {
-    const { data } = await apiPost('/settings/bbb/test/', { url: s.value.bbb_url, secret: s.value.bbb_secret })
-    bbbResult.value = { ok: data.success, msg: data.success ? 'Connected ✓' : data.error || 'Failed' }
+    const { data } = await apiPost('/settings/bbb/test/', { url: s.value.bbb_url, secret: s.value.bbb_key })
+    bbbResult.value = { ok: data.success, msg: data.success ? 'Connected ✓' : data.message || data.error || 'Failed' }
     health.value.find(h=>h.label==='BBB').ok = data.success
     health.value.find(h=>h.label==='BBB').value = data.success ? 'Online' : 'Offline'
   } catch { bbbResult.value = { ok: false, msg: 'Connection failed' } }

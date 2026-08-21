@@ -123,7 +123,8 @@ def notify_payment_received(transaction):
         if transaction.lesson:
             gid = get_or_create_guppy_user(transaction.lesson.tutor)
             if gid:
-                net = float(transaction.amount) * 0.85
+                from django.conf import settings
+                net = float(transaction.amount) * (1 - settings.PLATFORM_COMMISSION)
                 send_push_notification(gid,'💰 Payment Received!',f'GHS {net:.2f} earned from {transaction.payer_name}.')
     except Exception as e: logger.warning(f'[Guppy] notify_payment_received: {e}')
 

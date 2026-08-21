@@ -24,7 +24,7 @@
 <script setup>
 import { ref, nextTick, onUnmounted, watch } from 'vue'
 import GpSpinner from '@/components/common/GpSpinner.vue'
-import { apiGet, createWS } from '@/utils/api'
+import { apiGet, apiPost, createWS } from '@/utils/api'
 import { fmtTime } from '@/utils/helpers'
 import { useAuthStore } from '@/stores/auth'
 
@@ -65,12 +65,17 @@ function connectWS() {
   }
 }
 
-function send() {
+async function send() {
   const content = newMsg.value.trim()
-  if (!content || !ws || ws.readyState !== WebSocket.OPEN) return
-  ws.send(JSON.stringify({ type: 'message', content }))
+  if (!content || !props.conv?.id) return
+  newMsg.value = ''
   messages.value.push({ content, sender: myId, created_at: new Date().toISOString() })
-  newMsg.value = ''; nextTick(scrollBottom)
+  await nextTick(); scrollBottom()
+  try {
+    await apiPost(`/messaging/conversations/${props.conv.id}/messages/`, { content })
+  } catch {
+    messages.value = messages.value.filter(m => !(m.content === content && m.sender === myId && !m.id))
+  }
 }
 
 function sendTyping() {

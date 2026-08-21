@@ -1,6 +1,8 @@
 from rest_framework import permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from apps.tutors.models import UserDocument
 from django.db.models import Sum
 from django.contrib.auth import get_user_model
 from .models import StudentProfile
@@ -11,6 +13,7 @@ User = get_user_model()
 
 class StudentProfileView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get(self, request):
         from apps.scheduling.models import Lesson
@@ -36,6 +39,11 @@ class StudentProfileView(APIView):
             'school': profile.school,
             'learning_goals': profile.learning_goals,
             'subjects_interest': profile.subjects_interest,
+            'identity_document_type': profile.identity_document_type,
+            'has_identity_document': UserDocument.objects.filter(
+                user=request.user,
+                doc_type__in=['ghana_passport_card', 'voters_id_card', 'drivers_license', 'other_id'],
+            ).exists(),
             'is_approved': profile.is_approved,
         })
 
@@ -53,4 +61,15 @@ class StudentProfileView(APIView):
         serializer = StudentOnboardingSerializer(profile, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+
+        identity_file = request.FILES.get('identity_document')
+        identity_type = request.data.get('identity_document_type')
+        if identity_file and identity_type:
+            UserDocument.objects.create(user=request.user, doc_type=identity_type, file=identity_file)
+        for file_obj in request.FILES.getlist('documents'):
+            UserDocument.objects.create(
+                user=request.user,
+                doc_type=request.data.get('document_type', 'other'),
+                file=file_obj,
+            )
         return Response({'saved': True, 'profile': serializer.data})

@@ -4,7 +4,7 @@
       <div class="row g-4 mb-4">
         <div class="col-lg-4">
           <img src="@/assets/img/gooprep_logo.png" alt="Gooprep" style="height:44px;margin-bottom:1rem" />
-          <p class="small opacity-75">Ghana's leading tutoring platform. Expert tutors, live BigBlueButton classrooms, AI-powered learning, and mobile money payments.</p>
+          <p class="small opacity-75">Ghana's leading tutoring platform. Expert tutors, live VirtualClassRoom classrooms, AI-powered learning, and mobile money payments.</p>
           <div class="d-flex gap-3 mt-3">
             <a href="#" class="text-muted fs-5"><i class="bi bi-facebook"></i></a>
             <a href="#" class="text-muted fs-5"><i class="bi bi-twitter-x"></i></a>

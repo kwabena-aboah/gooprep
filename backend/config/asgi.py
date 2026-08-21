@@ -78,6 +78,14 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
         message = Message.objects.create(
             conversation=conversation, sender=self.scope['user'], content=content
         )
+        if conversation.guppy_conv_id:
+            from apps.messaging.guppy import get_or_create_guppy_user, send_message
+            sender_gid = get_or_create_guppy_user(self.scope['user'])
+            if sender_gid:
+                remote = send_message(conversation.guppy_conv_id, sender_gid, content)
+                if remote and remote.get('id'):
+                    message.guppy_msg_id = str(remote['id'])
+                    message.save(update_fields=['guppy_msg_id'])
         from django.utils import timezone
         conversation.last_message = content[:200]
         conversation.last_message_at = timezone.now()

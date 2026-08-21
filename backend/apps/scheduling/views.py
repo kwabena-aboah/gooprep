@@ -326,6 +326,33 @@ class LessonListView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            # Tutor booking rules are enforced here, not only in the UI.
+            tutor_profile = tutor.tutor_profile
+            now = timezone.now()
+            if start < now + timedelta(hours=tutor_profile.min_notice_hours):
+                return Response({'error': f'Please book at least {tutor_profile.min_notice_hours} hours in advance.', 'field': 'start_time'}, status=400)
+
+            blocked_dates = {str(item.get('date', item))[:10] for item in (tutor_profile.blocked_dates or [])}
+            if start.date().isoformat() in blocked_dates:
+                return Response({'error': 'The tutor is unavailable on that date.', 'field': 'start_time'}, status=400)
+
+            weekday_slots = [slot for slot in (tutor_profile.availability or []) if int(slot.get('day_of_week', -1)) == start.weekday()]
+            start_minutes = start.hour * 60 + start.minute
+            end_minutes = end.hour * 60 + end.minute
+            if not weekday_slots or not any(
+                int(str(slot.get('start_time', '00:00'))[:2]) * 60 + int(str(slot.get('start_time', '00:00'))[3:5]) <= start_minutes
+                and int(str(slot.get('end_time', '23:59'))[:2]) * 60 + int(str(slot.get('end_time', '23:59'))[3:5]) >= end_minutes
+                for slot in weekday_slots
+            ):
+                return Response({'error': 'The selected time is outside the tutor availability.', 'field': 'start_time'}, status=400)
+
+            day_lessons = Lesson.objects.filter(tutor=tutor, start_time__date=start.date()).exclude(status='cancelled')
+            if day_lessons.count() >= tutor_profile.max_daily_bookings:
+                return Response({'error': 'The tutor has reached the booking limit for that day.', 'field': 'start_time'}, status=400)
+            buffer_delta = timedelta(minutes=tutor_profile.booking_buffer_minutes)
+            if day_lessons.filter(start_time__lt=end + buffer_delta, end_time__gt=start - buffer_delta).exists():
+                return Response({'error': 'Please choose a time with enough buffer from another lesson.', 'field': 'start_time'}, status=400)
+
             # -----------------------------------------
             # Subject
             # -----------------------------------------

@@ -59,6 +59,12 @@ class MessageListView(APIView):
         content = request.data.get('content','').strip()
         if not content: return Response({'error':'Content required.'}, status=400)
         msg = Message.objects.create(conversation=conv, sender=request.user, content=content)
+        if conv.guppy_conv_id:
+            sender_gid = get_or_create_guppy_user(request.user)
+            guppy_message = guppy_send_message(conv.guppy_conv_id, sender_gid, content) if sender_gid else None
+            if guppy_message and guppy_message.get('id'):
+                msg.guppy_msg_id = str(guppy_message['id'])
+                msg.save(update_fields=['guppy_msg_id'])
         conv.last_message    = content[:200]
         conv.last_message_at = timezone.now()
         conv.save(update_fields=['last_message','last_message_at'])
@@ -94,9 +100,20 @@ class GuppyWebhookView(APIView):
             sender = User.objects.filter(id=sender_ext).first()
             if not sender: return
             content = data.get('content','')
-            msg = Message.objects.create(conversation=conv, sender=sender, content=content)
+            guppy_message_id = str(data.get('id', ''))
+            if guppy_message_id and Message.objects.filter(guppy_msg_id=guppy_message_id).exists():
+                return
+            msg = Message.objects.create(conversation=conv, sender=sender, content=content,
+                                         guppy_msg_id=guppy_message_id)
             conv.last_message=content[:200]; conv.last_message_at=timezone.now()
             conv.save(update_fields=['last_message','last_message_at'])
+            from asgiref.sync import async_to_sync
+            from channels.layers import get_channel_layer
+            async_to_sync(get_channel_layer()).group_send(
+                f'chat_{conv.id}', {'type': 'chat_event', 'event_type': 'message',
+                'data': {'id': msg.id, 'content': msg.content, 'sender': sender.id,
+                         'created_at': msg.created_at.isoformat()}}
+            )
             for p in conv.participants.exclude(id=sender.id):
                 from apps.accounts.models import Notification
                 Notification.objects.create(user=p,notification_type='message_received',

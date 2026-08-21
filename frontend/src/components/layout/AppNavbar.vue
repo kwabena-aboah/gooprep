@@ -11,8 +11,15 @@
       <RouterLink to="/register" class="btn btn-sm btn-gp">Sign up free</RouterLink>
     </template>
     <template v-else>
-      <div class="dropdown me-3">
-        <button class="btn btn-link text-white p-0 position-relative" data-bs-toggle="dropdown">
+      <RouterLink
+        v-if="auth.isTutor || auth.isStudent"
+        class="btn btn-sm btn-gp-outline text-white border-white me-3 d-none d-md-inline-flex align-items-center"
+        :to="auth.isTutor ? '/tutor-onboarding' : '/student-onboarding'"
+      >
+        <i class="bi bi-clipboard-check me-1"></i>Continue onboarding
+      </RouterLink>
+      <div class="dropdown me-3 flex-shrink-0">
+        <button type="button" class="btn btn-link text-white p-0 position-relative" data-bs-toggle="dropdown" aria-label="Notifications">
           <i class="bi bi-bell fs-5"></i>
           <span v-if="notifStore.unreadCount > 0" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size:.6rem">{{ notifStore.unreadCount }}</span>
         </button>
@@ -54,6 +61,7 @@
           </li>
           <li><RouterLink class="dropdown-item small" to="/dashboard"><i class="bi bi-speedometer2 me-2 text-primary"></i>Dashboard</RouterLink></li>
           <li><RouterLink class="dropdown-item small" to="/profile"><i class="bi bi-person me-2 text-primary"></i>Profile</RouterLink></li>
+          <li v-if="auth.isTutor || auth.isStudent"><RouterLink class="dropdown-item small" :to="auth.isTutor ? '/tutor-onboarding' : '/student-onboarding'"><i class="bi bi-clipboard-check me-2 text-primary"></i>Continue onboarding</RouterLink></li>
           <li v-if="auth.isTutor"><RouterLink class="dropdown-item small" to="/earnings"><i class="bi bi-wallet2 me-2 text-primary"></i>Earnings</RouterLink></li>
           <li v-if="auth.isAdmin"><RouterLink class="dropdown-item small" to="/admin"><i class="bi bi-shield-check me-2 text-primary"></i>Admin</RouterLink></li>
           <li><RouterLink class="dropdown-item small" to="/settings"><i class="bi bi-gear me-2 text-primary"></i>Settings</RouterLink></li>

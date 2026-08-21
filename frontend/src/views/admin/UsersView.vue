@@ -14,7 +14,7 @@
     <div v-else class="gp-card">
       <div class="table-responsive">
         <table class="gp-table">
-          <thead><tr><th>User</th><th>Role</th><th>Plan</th><th>Joined</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th>User</th><th>Phone</th><th>Role</th><th>Plan</th><th>Joined</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody>
             <tr v-for="u in users" :key="u.id">
               <td>
@@ -23,10 +23,12 @@
                   <div><div class="small fw-600">{{ u.full_name }}</div><div class="text-muted" style="font-size:.7rem">{{ u.email }}</div></div>
                 </div>
               </td>
-              <td><span class="badge bg-light text-dark border small text-capitalize">{{ u.role }}</span></td>
-              <td><span class="gp-badge small">{{ u.subscription_plan||'Free' }}</span></td>
-              <td class="small text-muted">{{ fmtDate(u.date_joined) }}</td>
-              <td><span class="badge small" :class="u.is_active?'bg-success-subtle text-success':'bg-danger-subtle text-danger'">{{ u.is_active?'Active':'Suspended' }}</span></td>
+              <!-- Keep the phone cell even when no phone was provided so the remaining columns stay aligned. -->
+              <td class="small text-muted">{{ u.phone || '' }}</td>
+              <td><span class="badge bg-light text-dark border small text-capitalize">{{ displayRole(u.role) }}</span></td>
+              <td><span class="gp-badge small">{{ displayPlan(u.subscription_plan) }}</span></td>
+              <td class="small text-muted">{{ fmtDate(u.date_joined) || '' }}</td>
+              <td><span class="badge small" :class="u.is_active?'bg-success-subtle text-success':'bg-danger-subtle text-danger'">{{ u.is_active ? 'Active' : 'Suspended' }}</span></td>
               <td>
                 <div class="d-flex gap-1">
                   <button class="btn btn-xs btn-outline-secondary" @click="impersonate(u)" title="View as user"><i class="bi bi-person-video"></i></button>
@@ -55,6 +57,8 @@ const users = ref([]); const loading = ref(true); const total = ref(0)
 const page = ref(1); const search = ref(''); const roleFilter = ref('')
 const totalPages = computed(() => Math.ceil(total.value/20))
 const fallback = n => `https://ui-avatars.com/api/?name=${encodeURIComponent(n||'U')}&background=e2e8f0&color=64748b`
+const displayRole = role => role ? role.charAt(0).toUpperCase() + role.slice(1) : ''
+const displayPlan = plan => plan ? plan.charAt(0).toUpperCase() + plan.slice(1) : 'Free'
 const debouncedFetch = debounce(()=>{ page.value=1; fetchUsers() }, 350)
 async function fetchUsers() {
   loading.value = true

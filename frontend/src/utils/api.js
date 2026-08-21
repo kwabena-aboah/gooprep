@@ -74,7 +74,9 @@ api.interceptors.response.use(
     if (
       error.response?.status === 401 &&
       originalRequest &&
-      !originalRequest._retry
+      !originalRequest._retry &&
+      !originalRequest.url?.includes('/auth/token/') &&
+      !originalRequest.url?.includes('/auth/token/refresh/')
     ) {
       /*
        * Another request is already refreshing the token.
@@ -149,6 +151,7 @@ api.interceptors.response.use(
 
         localStorage.removeItem('access_token')
         localStorage.removeItem('refresh_token')
+        localStorage.removeItem('gp_user')
 
         return Promise.reject(refreshError)
 
@@ -220,9 +223,13 @@ export const apiDelete = (
 
 export const apiUpload = (
   url,
-  form
+  form,
+  method = 'patch'
 ) => {
-  return api.patch(url, form, {
+  return api.request({
+    method,
+    url,
+    data: form,
     headers: {
       'Content-Type': 'multipart/form-data',
     },

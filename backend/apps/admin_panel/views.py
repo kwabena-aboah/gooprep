@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.http import HttpResponse
 from django.db.models import Q, Sum
+from django.conf import settings
 from django.utils import timezone
 from datetime import timedelta, date
 import logging
@@ -125,8 +126,8 @@ class AdminUserListView(APIView):
         total     = qs.count()
         items = list(qs[(page-1)*page_size : page*page_size].values(
             'id','email','first_name','last_name','role','subscription_plan',
-            'city','date_joined','last_login','is_active','total_points','level',
-            'was_referred','referrer_name'))
+            'city','phone','date_joined','last_login','is_active','total_points','level',
+            'was_referred','referrer_name','email_verified'))
         for it in items:
             it['full_name'] = f"{it['first_name']} {it['last_name']}".strip()
             if it['date_joined']: it['date_joined'] = it['date_joined'].isoformat()
@@ -153,7 +154,7 @@ class AdminTutorListView(APIView):
     def get(self, request):
         from apps.tutors.models import TutorProfile
         from apps.tutors.serializers import TutorProfileSerializer
-        qs = TutorProfile.objects.select_related('user').prefetch_related('subjects')
+        qs = TutorProfile.objects.select_related('user').prefetch_related('subjects', 'user__verification_documents')
         approval = request.query_params.get('approval_status')
         search   = request.query_params.get('search')
         if approval: qs = qs.filter(approval_status=approval)
@@ -161,7 +162,9 @@ class AdminTutorListView(APIView):
         page_size = int(request.query_params.get('page_size', 12))
         page      = int(request.query_params.get('page', 1))
         total     = qs.count()
-        return Response({'count': total, 'results': TutorProfileSerializer(qs[(page-1)*page_size:page*page_size], many=True).data})
+        return Response({'count': total, 'results': TutorProfileSerializer(
+            qs[(page-1)*page_size:page*page_size], many=True, context={'request': request}
+        ).data})
 
 
 @api_view(['POST'])
@@ -230,6 +233,14 @@ class StudentApprovalListView(APIView):
             'is_approved':      p.is_approved,
             'education_level':  p.education_level,
             'school':           p.school,
+            'identity_document_type': p.identity_document_type,
+            'verification_documents': [
+                {'id': d.id, 'doc_type': d.doc_type, 'doc_label': d.get_doc_type_display(),
+                 'file_url': request.build_absolute_uri(d.file.url),
+                 'file_name': d.file.name.rsplit('/', 1)[-1], 'is_verified': d.is_verified,
+                 'uploaded_at': d.uploaded_at.isoformat()}
+                for d in p.user.verification_documents.all()
+            ],
             'was_referred':     p.user.was_referred,
             'referrer_name':    p.user.referrer_name,
         } for p in profiles[(page-1)*page_size:page*page_size]]
@@ -299,7 +310,7 @@ class AdminRevenueView(APIView):
         period = request.query_params.get('period', 'month')
         qs     = _date_filter(Transaction.objects.filter(status='success'), 'created_at', period)
         gross  = float(qs.aggregate(s=Sum('amount'))['s'] or 0)
-        fees   = round(gross * 0.15, 2)
+        fees   = round(gross * settings.PLATFORM_COMMISSION, 2)
         payouts_total = float(Payout.objects.filter(status='completed').aggregate(s=Sum('amount'))['s'] or 0)
         now   = timezone.now()
         days  = 7 if period == 'week' else 30
@@ -311,7 +322,7 @@ class AdminRevenueView(APIView):
         return Response({
             'gross':   f'{gross:.2f}', 'fees': f'{fees:.2f}',
             'payouts': f'{payouts_total:.2f}',
-            'escrow':  f'{max(gross*0.85 - payouts_total, 0):.2f}',
+            'escrow':  f'{max(gross * (1 - settings.PLATFORM_COMMISSION) - payouts_total, 0):.2f}',
             'daily':   daily,
         })
 

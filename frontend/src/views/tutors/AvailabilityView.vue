@@ -166,7 +166,13 @@ onMounted(async () => {
         schedule.value[slot.day_of_week].slots.push({ start: slot.start_time, end: slot.end_time })
     })
     upcoming.value = (lessons.data?.results || []).filter(l => l.status === 'confirmed')
-    settings.value.instant_book = avail.data?.instant_book ?? true
+    blockedDates.value = avail.data?.blocked_dates || []
+    settings.value = {
+      min_notice: avail.data?.min_notice_hours ?? 24,
+      max_daily: avail.data?.max_daily_bookings ?? 6,
+      buffer: avail.data?.booking_buffer_minutes ?? 15,
+      instant_book: avail.data?.instant_book ?? true,
+    }
   } catch {} finally { loading.value = false }
 })
 </script>

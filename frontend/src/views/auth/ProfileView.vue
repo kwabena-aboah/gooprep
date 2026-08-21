@@ -161,6 +161,10 @@ async function save() {
     if (form.value._avatarFile) {
       const fd = new FormData(); fd.append('avatar', form.value._avatarFile)
       await apiUpload('/auth/users/me/', fd)
+      // Refresh the shared auth state so the navbar keeps the notification
+      // controls and immediately uses the newly uploaded avatar.
+      await auth.fetchMe()
+      form.value = { ...form.value, ...auth.user }
     }
     const allowed = ['first_name','last_name','phone','bio','timezone','language','country','city','date_of_birth','notify_email','notify_sms','notify_push','notify_whatsapp']
     const payload = Object.fromEntries(allowed.map(k => [k, form.value[k]]))

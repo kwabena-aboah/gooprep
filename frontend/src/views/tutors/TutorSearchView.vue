@@ -221,7 +221,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Modal } from 'bootstrap'
 import { useAuthStore } from '@/stores/auth'
 import { useNotifStore } from '@/stores/notifs'
@@ -238,6 +238,7 @@ import AppFooter from '@/components/layout/AppFooter.vue'
 
 const auth       = useAuthStore()
 const notifStore = useNotifStore()
+const route      = useRoute()
 const router     = useRouter()
 const tutors     = ref([])
 const subjects   = ref([])
@@ -289,14 +290,10 @@ function clearFilters() {
 
 function changePage(p) { page.value = p; fetchTutors(); window.scrollTo(0,0) }
 
-async function openTutor(t) {
-  selected.value = t; mTab.value = 'about'; modalReviews.value = []; reviewsLoading.value = true
-  const modal = new Modal(document.getElementById('tutorModal'))
-  modal.show()
-  try {
-    const { data } = await apiGet('/reviews/', { tutor_id: t.id })
-    modalReviews.value = data.results || []
-  } catch {} finally { reviewsLoading.value = false }
+function openTutor(t) {
+  // Open the public storefront-style profile so visitors can see the
+  // complete tutor details and availability before booking.
+  router.push({ name: 'tutor-profile', params: { id: t.id } })
 }
 
 async function toggleFav(t) {
@@ -371,6 +368,17 @@ async function confirmBook(form) {
 }
 
 onMounted(async () => {
+  const query = route.query
+  filters.value = {
+    search: query.search || '',
+    subject: query.subject || '',
+    min_price: query.min_price || '',
+    max_price: query.max_price || '',
+    min_rating: query.min_rating || '',
+    teaching_style: query.teaching_style || '',
+    instant_book: query.instant_book === 'true',
+    featured: query.is_featured === 'true' || query.featured === 'true',
+  }
   const [_, subj] = await Promise.all([fetchTutors(), apiGet('/tutors/subjects/')])
   subjects.value = subj.data?.results || subj.data || []
 })

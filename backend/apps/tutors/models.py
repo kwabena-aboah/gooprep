@@ -33,12 +33,18 @@ class TutorProfile(models.Model):
     total_lessons      = models.PositiveIntegerField(default=0)
     total_students     = models.PositiveIntegerField(default=0)
     response_time      = models.PositiveIntegerField(default=60)  # minutes
+    min_notice_hours   = models.PositiveIntegerField(default=24)
+    max_daily_bookings = models.PositiveIntegerField(default=6)
+    booking_buffer_minutes = models.PositiveIntegerField(default=15)
     total_earnings     = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     pending_payout     = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     total_paid_out     = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     education          = models.JSONField(default=list)
     certifications     = models.JSONField(default=list)
     availability       = models.JSONField(default=list)
+    blocked_dates      = models.JSONField(default=list)
+    packages           = models.JSONField(default=list)
+    identity_document_type = models.CharField(max_length=30, blank=True)
     created_at         = models.DateTimeField(auto_now_add=True)
     updated_at         = models.DateTimeField(auto_now=True)
 
@@ -58,3 +64,25 @@ class TutorDocument(models.Model):
     file        = models.FileField(upload_to='tutor_docs/')
     is_verified = models.BooleanField(default=False)
     uploaded_at = models.DateTimeField(auto_now_add=True)
+
+class UserDocument(models.Model):
+    TYPES = [
+        ('ghana_passport_card', 'Ghana passport card'),
+        ('voters_id_card', "Voter's ID card"),
+        ('drivers_license', "Driver's license"),
+        ('other_id', 'Other identity document'),
+        ('professional_certificate', 'Professional certificate'),
+        ('degree_certificate', 'Degree certificate'),
+        ('other', 'Other document'),
+    ]
+    user        = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='verification_documents')
+    doc_type    = models.CharField(max_length=30, choices=TYPES)
+    file        = models.FileField(upload_to='verification_documents/')
+    is_verified = models.BooleanField(default=False)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return f'{self.user.get_full_name()} — {self.get_doc_type_display()}'

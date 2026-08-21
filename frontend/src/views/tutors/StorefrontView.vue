@@ -3,7 +3,8 @@
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
       <div><h2 class="fw-800 mb-0">My Storefront</h2><p class="text-muted small mb-0">Customise your public tutor profile</p></div>
       <div class="d-flex gap-2">
-        <a :href="`/tutor/${profile.slug}`" target="_blank" class="btn btn-outline-secondary btn-sm">
+        <span v-if="!profile.slug" class="text-muted small align-self-center">Save to create your preview link</span>
+        <a v-if="profile.slug" :href="`/tutor/${profile.slug}`" target="_blank" class="btn btn-outline-secondary btn-sm">
           <i class="bi bi-eye me-1"></i>Preview
         </a>
         <button class="btn btn-gp btn-sm" @click="save" :disabled="saving">
@@ -79,6 +80,10 @@
             <h5 class="fw-700 mt-2 mb-0">{{ auth.user?.first_name }} {{ auth.user?.last_name }}</h5>
             <div class="text-muted small text-truncate px-2">{{ form.headline }}</div>
             <div class="fw-700 text-gp-primary mt-1">GHS {{ form.hourly_rate }}/hr</div>
+            <div v-if="profile.subjects_list?.length" class="d-flex flex-wrap justify-content-center gap-1 mt-2">
+              <span v-for="subject in profile.subjects_list.slice(0, 4)" :key="subject.id" class="gp-badge small">{{ subject.name }}</span>
+              <span v-if="profile.subjects_list.length > 4" class="text-muted small align-self-center">+{{ profile.subjects_list.length - 4 }} more</span>
+            </div>
           </div>
           <hr />
           <div class="small">
@@ -117,7 +122,8 @@ const fallback   = computed(() => `https://ui-avatars.com/api/?name=${encodeURIC
 const form = ref({
   headline:'', bio:'', hourly_rate:60, response_time:60, teaching_style:'interactive',
   language:'English', intro_video_url:'', slug:'', instant_book:true,
-  trial_lesson_enabled:false, trial_lesson_price:30, record_by_default:true, packages:[],
+  trial_lesson_enabled:false, trial_lesson_price:30, record_by_default:true,
+  packages: [],
 })
 
 function addPkg() { form.value.packages.push({ name:'', lessons:5, price:250, validity:'30 days' }) }
@@ -125,9 +131,13 @@ function addPkg() { form.value.packages.push({ name:'', lessons:5, price:250, va
 async function save() {
   saving.value = true
   try {
-    await apiPatch('/tutors/my-profile/', form.value)
+    const { data } = await apiPatch('/tutors/my-profile/', form.value)
+    profile.value = data
+    Object.keys(form.value).forEach(k => { if (data[k] !== undefined) form.value[k] = data[k] })
     notifStore.toast('Storefront saved!', 'success')
-  } catch(e) { notifStore.toast(Object.values(e.response?.data||{}).flat().join(' ')||'Failed.','error') }
+  } catch(e) {
+    notifStore.toast(Object.values(e.response?.data||{}).flat().join(' ')||'Failed to save storefront.','error')
+  }
   finally { saving.value = false }
 }
 

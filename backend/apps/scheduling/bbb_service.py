@@ -22,7 +22,11 @@ class BBBService:
     def __init__(self):
         configured_url = (getattr(settings, 'BBB_URL', '') or '').strip()
         self.base_url = self._normalize_base_url(configured_url)
-        self.secret = (getattr(settings, 'BBB_SECRET', '') or '').strip()
+        self.secret = (
+            getattr(settings, 'BBB_KEY', '')
+            or getattr(settings, 'BBB_SECRET', '')
+            or ''
+        ).strip()
 
     @staticmethod
     def _normalize_base_url(url):

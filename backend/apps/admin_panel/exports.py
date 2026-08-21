@@ -80,13 +80,14 @@ def export_lessons_excel(queryset) -> bytes:
 def export_revenue_excel(queryset) -> bytes:
     import openpyxl
     from decimal import Decimal
+    from django.conf import settings
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = 'Revenue'
-    headers = ['ID','Payer','Amount(GHS)','Platform Fee(15%)','Tutor Net(85%)','Method','Status','Reference','Date']
+    headers = ['ID','Payer','Amount(GHS)','Platform Fee','Tutor Net','Method','Status','Reference','Date']
     _apply_header_style(ws, 1, headers)
     total_gross = total_fee = Decimal(0)
     for row, t in enumerate(queryset.select_related('payer'), 2):
-        fee = t.amount * Decimal('0.15')
-        net = t.amount * Decimal('0.85')
+        fee = t.amount * Decimal(str(settings.PLATFORM_COMMISSION))
+        net = t.amount * (Decimal('1') - Decimal(str(settings.PLATFORM_COMMISSION)) )
         total_gross += t.amount; total_fee += fee
         ws.cell(row=row, column=1, value=t.id)
         ws.cell(row=row, column=2, value=t.payer.get_full_name())
@@ -220,9 +221,11 @@ def export_lessons_pdf(qs) -> bytes:
 
 
 def export_revenue_pdf(qs) -> bytes:
-    headers = ['ID','Payer','Amount','Fee(15%)','Net(85%)','Method','Status','Date']
+    from django.conf import settings
+    commission = float(settings.PLATFORM_COMMISSION)
+    headers = ['ID','Payer','Amount','Platform Fee','Tutor Net','Method','Status','Date']
     rows = [[t.id,t.payer.get_full_name(),f'GHS {t.amount}',
-             f'GHS {float(t.amount)*0.15:.2f}',f'GHS {float(t.amount)*0.85:.2f}',
+             f'GHS {float(t.amount)*commission:.2f}',f'GHS {float(t.amount)*(1-commission):.2f}',
              t.payment_method,t.status,
              t.created_at.strftime('%d %b %Y') if t.created_at else '']
             for t in qs.select_related('payer')]

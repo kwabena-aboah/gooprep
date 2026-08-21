@@ -3,11 +3,22 @@ from .models import Transaction, Subscription, Payout, Dispute
 
 class TransactionSerializer(serializers.ModelSerializer):
     payer_name = serializers.SerializerMethodField()
+    lesson_subject = serializers.SerializerMethodField()
+    lesson_duration = serializers.SerializerMethodField()
+
     class Meta:
         model = Transaction
         fields = ['id','payer_name','amount','currency','payment_method','status',
-                  'paystack_ref','description','created_at']
-    def get_payer_name(self, obj): return obj.payer.get_full_name()
+                  'paystack_ref','description','lesson_subject','lesson_duration','created_at']
+
+    def get_payer_name(self, obj):
+        return obj.payer.get_full_name()
+
+    def get_lesson_subject(self, obj):
+        return obj.lesson.subject.name if obj.lesson and obj.lesson.subject else ''
+
+    def get_lesson_duration(self, obj):
+        return obj.lesson.duration_minutes if obj.lesson else None
 
 class SubscriptionSerializer(serializers.ModelSerializer):
     class Meta:

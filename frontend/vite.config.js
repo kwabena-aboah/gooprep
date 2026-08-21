@@ -5,6 +5,7 @@ import { resolve } from 'path'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
+    // base: '/demo/', // sub directory config
     plugins: [vue()],
     resolve: { alias: { '@': resolve(__dirname, 'src') } },
     server: {

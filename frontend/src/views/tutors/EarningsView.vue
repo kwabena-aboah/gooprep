@@ -53,7 +53,7 @@
         <GpEmpty v-if="!txns.length" icon="bi bi-receipt" message="No earnings yet. Book your first lesson!" />
         <div v-else class="table-responsive">
           <table class="gp-table">
-            <thead><tr><th>Date</th><th>Student</th><th>Subject</th><th>Duration</th><th>Gross</th><th>Net (80%)</th><th>Status</th></tr></thead>
+            <thead><tr><th>Date</th><th>Student</th><th>Subject</th><th>Duration</th><th>Gross</th><th>Net ({{ Math.round(TUTOR_SHARE * 100) }}%)</th><th>Status</th></tr></thead>
             <tbody>
               <tr v-for="t in txns" :key="t.id">
                 <td class="small text-muted">{{ fmtDate(t.created_at) }}</td>
@@ -61,7 +61,7 @@
                 <td class="small">{{ t.lesson_subject || '—' }}</td>
                 <td class="small text-muted">{{ t.lesson_duration || '—' }} min</td>
                 <td class="small fw-600">GHS {{ t.amount }}</td>
-                <td class="fw-700 text-success">GHS {{ (parseFloat(t.amount)*0.80).toFixed(2) }}</td>
+                <td class="fw-700 text-success">GHS {{ (parseFloat(t.amount)*TUTOR_SHARE).toFixed(2) }}</td>
                 <td><span class="badge small" :class="t.status==='success'?'bg-success-subtle text-success':'bg-warning-subtle text-warning'">{{ t.status }}</span></td>
               </tr>
             </tbody>
@@ -106,6 +106,7 @@ import { fmtDate } from '@/utils/helpers'
 import GpSpinner from '@/components/common/GpSpinner.vue'
 import GpEmpty   from '@/components/common/GpEmpty.vue'
 import StatCard  from '@/components/common/StatCard.vue'
+import { PLATFORM_COMMISSION, TUTOR_SHARE } from '@/utils/platform'
 
 const notifStore = useNotifStore()
 const loading    = ref(true)
@@ -122,21 +123,21 @@ const monthEarnings = computed(() => {
   const m = new Date().getMonth(), y = new Date().getFullYear()
   return txns.value
     .filter(t => { const d = new Date(t.created_at); return d.getMonth()===m && d.getFullYear()===y && t.status==='success' })
-    .reduce((a,t) => a+parseFloat(t.amount)*0.80, 0).toFixed(2)
+    .reduce((a,t) => a+parseFloat(t.amount)*TUTOR_SHARE, 0).toFixed(2)
 })
 
 const revSplit = computed(() => {
   const total = parseFloat(profile.value.total_earnings||0)
   return [
-    { label:'Your earnings (80%)', pct:80, color:'var(--gp-red)' },
-    { label:'Platform fee (20%)',  pct:10, color:'var(--gp-amber)' },
+    { label:`Your earnings (${Math.round(TUTOR_SHARE*100)}%)`, pct:TUTOR_SHARE*100, color:'var(--gp-red)' },
+    { label:`Platform fee (${Math.round(PLATFORM_COMMISSION*100)}%)`, pct:PLATFORM_COMMISSION*100, color:'var(--gp-amber)' },
   ]
 })
 
 function buildChart() {
   const byMonth = Array(12).fill(0)
   txns.value.filter(t => t.status==='success' && new Date(t.created_at).getFullYear()===chartYear.value)
-    .forEach(t => { byMonth[new Date(t.created_at).getMonth()] += parseFloat(t.amount)*0.80 })
+    .forEach(t => { byMonth[new Date(t.created_at).getMonth()] += parseFloat(t.amount)*TUTOR_SHARE })
   const max = Math.max(...byMonth, 1)
   monthlyData.value = byMonth.map((v,i) => ({ amount: v.toFixed(2), pct: Math.round(v/max*100), label: MONTH_LABELS[i] }))
 }

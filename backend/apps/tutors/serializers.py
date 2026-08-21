@@ -1,5 +1,25 @@
 from rest_framework import serializers
-from .models import TutorProfile, Subject
+from .models import TutorProfile, Subject, UserDocument
+
+
+class UserDocumentSerializer(serializers.ModelSerializer):
+    file_url = serializers.SerializerMethodField()
+    file_name = serializers.SerializerMethodField()
+    doc_label = serializers.CharField(source='get_doc_type_display', read_only=True)
+
+    class Meta:
+        model = UserDocument
+        fields = ['id', 'doc_type', 'doc_label', 'file_url', 'file_name', 'is_verified', 'uploaded_at']
+
+    def get_file_url(self, obj):
+        if not obj.file:
+            return ''
+        url = obj.file.url
+        request = self.context.get('request')
+        return request.build_absolute_uri(url) if request else url
+
+    def get_file_name(self, obj):
+        return obj.file.name.rsplit('/', 1)[-1] if obj.file else ''
 
 class SubjectSerializer(serializers.ModelSerializer):
     class Meta: model = Subject; fields = ['id','name','slug','icon']
@@ -11,16 +31,20 @@ class TutorProfileSerializer(serializers.ModelSerializer):
     city          = serializers.SerializerMethodField()
     country       = serializers.SerializerMethodField()
     subjects_list = serializers.SerializerMethodField()
+    phone         = serializers.CharField(source='user.phone', read_only=True, allow_blank=True)
+    verification_documents = serializers.SerializerMethodField()
 
     class Meta:
         model = TutorProfile
-        fields = ['id','user_id','full_name','email','avatar_url','city','country',
+        fields = ['id','user_id','full_name','email','phone','avatar_url','city','country',
                   'headline','bio','years_experience','hourly_rate','teaching_style',
                   'trial_lesson_enabled','trial_lesson_price','instant_book','slug',
                   'average_rating','total_reviews','total_lessons','total_students',
-                  'response_time','is_featured','is_top_rated','approval_status',
-                  'subjects_list','education','certifications','intro_video_url',
-                  'total_earnings','pending_payout','total_paid_out','availability']
+                  'response_time','min_notice_hours','max_daily_bookings','booking_buffer_minutes',
+                  'is_featured','is_top_rated','approval_status',
+                  'subjects_list','education','certifications','intro_video_url','identity_document_type','verification_documents',
+                  'total_earnings','pending_payout','total_paid_out','availability',
+                  'blocked_dates','packages']
 
     def get_full_name(self, obj): return obj.user.get_full_name()
     def get_email(self, obj):     return obj.user.email
@@ -28,4 +52,12 @@ class TutorProfileSerializer(serializers.ModelSerializer):
     def get_city(self, obj):      return obj.user.city
     def get_country(self, obj):   return obj.user.country
     def get_subjects_list(self, obj):
-        return [{'id':s.id,'name':s.name,'slug':s.slug} for s in obj.subjects.all()]
+        return [{'id': s.id, 'name': s.name, 'slug': s.slug} for s in obj.subjects.all()]
+
+    def get_verification_documents(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_staff:
+            return []
+        return UserDocumentSerializer(
+            obj.user.verification_documents.all(), many=True, context=self.context
+        ).data

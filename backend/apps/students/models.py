@@ -7,6 +7,7 @@ class StudentProfile(models.Model):
     school           = models.CharField(max_length=200, blank=True)
     subjects_interest = models.JSONField(default=list)
     learning_goals   = models.TextField(blank=True)
+    identity_document_type = models.CharField(max_length=30, blank=True)
     needs_approval   = models.BooleanField(default=True)
     is_approved      = models.BooleanField(default=False)
     approved_by      = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_students')

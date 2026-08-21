@@ -28,6 +28,7 @@
       </RouterLink>
       <template v-if="auth.isStudent">
         <div class="sidebar-section">Learning</div>
+        <RouterLink class="sidebar-link" :class="{active:isActive('/student-onboarding')}" to="/student-onboarding"><i class="bi bi-clipboard-check"></i>Continue onboarding</RouterLink>
         <RouterLink class="sidebar-link" :class="{active:isActive('/tutors')}" to="/tutors"><i class="bi bi-search"></i>Find Tutors</RouterLink>
         <RouterLink class="sidebar-link" :class="{active:isActive('/group-classes')}" to="/group-classes"><i class="bi bi-people"></i>Group Classes</RouterLink>
         <RouterLink class="sidebar-link" :class="{active:isActive('/learning')}" to="/learning"><i class="bi bi-map"></i>Learning Hub</RouterLink>

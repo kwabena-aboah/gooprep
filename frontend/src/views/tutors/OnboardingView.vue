@@ -140,8 +140,34 @@
       </div>
     </div>
 
-    <!-- Step 3: Preview -->
+    <!-- Step 3: Identity & documents -->
     <div v-if="step===3" class="gp-card p-4 p-md-5">
+      <h5 class="fw-700 mb-4"><i class="bi bi-file-earmark-lock me-2 text-gp-primary"></i>Identity & Professional Documents</h5>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label small fw-600">Identity document type *</label>
+          <select class="form-select" v-model="form.identity_document_type">
+            <option value="" disabled>Select document type</option>
+            <option v-for="option in identityOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label small fw-600">Identity document *</label>
+          <input class="form-control" type="file" accept="image/*,.pdf" @change="setIdentityDocument" />
+          <div class="form-text">JPG, PNG or PDF. Maximum 10MB.</div>
+          <div v-if="identityFile" class="small text-success mt-1"><i class="bi bi-check-circle me-1"></i>{{ identityFile.name }}</div>
+        </div>
+        <div class="col-12">
+          <label class="form-label small fw-600">Professional certificates and other documents <span class="text-muted fw-400">(optional)</span></label>
+          <input class="form-control" type="file" accept="image/*,.pdf" multiple @change="setSupportingDocuments" />
+          <div class="form-text">Upload certificates, degrees or other supporting documents in image/PDF format.</div>
+          <div v-if="supportingFiles.length" class="small text-muted mt-1">{{ supportingFiles.length }} file(s) selected</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 4: Preview -->
+    <div v-if="step===4" class="gp-card p-4 p-md-5">
       <h5 class="fw-700 mb-4"><i class="bi bi-eye me-2 text-gp-primary"></i>Preview & Submit</h5>
       <div class="gp-card p-4 mb-4" style="background:linear-gradient(135deg,#fff8f5,#fff3e0)">
         <div class="d-flex gap-3 align-items-start mb-3">
@@ -187,11 +213,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useNotifStore } from '@/stores/notifs'
 import { apiGet, apiPost, apiUpload } from '@/utils/api'
+import { GHANA_INSTITUTIONS } from '@/utils/ghanaInstitutions'
 
 const auth       = useAuthStore()
 const notifStore = useNotifStore()
@@ -203,13 +230,45 @@ const agreedTerms= ref(false)
 const allSubjects= ref([])
 const avatarPrev = ref('')
 const avatarFile = ref(null)
+const identityFile = ref(null)
+const supportingFiles = ref([])
+const identityOptions = [
+  { value:'ghana_passport_card', label:'Ghana passport card' },
+  { value:'voters_id_card', label:"Voter's ID card" },
+  { value:'drivers_license', label:"Driver's license" },
+  { value:'other_id', label:'Other identity document' },
+]
 
-const steps = ['Basic Info','Subjects','Media','Preview']
+const steps = ['Basic Info','Subjects','Media','Documents','Preview']
 const form  = ref({
   headline:'', years_experience:1, hourly_rate:60, teaching_style:'interactive',
   city:'', bio:'', instant_book:false, trial_lesson_enabled:false, trial_lesson_price:30,
-  subjects:[], education:[], intro_video_url:'',
+  subjects:[], education:[], intro_video_url:'', identity_document_type:'',
 })
+const draftKey = computed(() => `gooprep:tutor-onboarding:${auth.user?.id || 'guest'}`)
+
+function saveDraft() {
+  localStorage.setItem(draftKey.value, JSON.stringify({ form: form.value, step: step.value }))
+}
+function restoreDraft(profile) {
+  try {
+    const draft = JSON.parse(localStorage.getItem(draftKey.value) || '{}')
+    if (draft.form) Object.assign(form.value, draft.form)
+    if (Number.isInteger(draft.step)) step.value = Math.min(draft.step, steps.length - 1)
+  } catch { /* Ignore invalid drafts. */ }
+  if (profile) {
+    const backendForm = {
+      headline: profile.headline, bio: profile.bio, years_experience: profile.years_experience,
+      hourly_rate: profile.hourly_rate, teaching_style: profile.teaching_style,
+      intro_video_url: profile.intro_video_url, identity_document_type: profile.identity_document_type,
+      education: profile.education, subjects: (profile.subjects_list || []).map(s => s.id),
+    }
+    Object.entries(backendForm).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '' && !(Array.isArray(value) && !value.length)) form.value[key] = value
+    })
+  }
+}
+watch([form, step], saveDraft, { deep: true })
 
 const fallback = computed(() =>
   `https://ui-avatars.com/api/?name=${encodeURIComponent(auth.user?.first_name||'T')}&background=e63900&color=fff`)
@@ -227,6 +286,7 @@ const embedUrl = computed(() => {
 const stepValid = computed(() => {
   if (step.value===0) return form.value.headline && form.value.hourly_rate>0 && form.value.bio.length>=100
   if (step.value===1) return form.value.subjects.length>0
+  if (step.value===3) return !!form.value.identity_document_type && !!identityFile.value
   return true
 })
 
@@ -237,21 +297,33 @@ function setAvatar(e) {
   if (avatarFile.value) avatarPrev.value = URL.createObjectURL(avatarFile.value)
 }
 
+function setIdentityDocument(e) { identityFile.value = e.target.files[0] || null }
+function setSupportingDocuments(e) { supportingFiles.value = Array.from(e.target.files || []) }
+
 async function submit() {
   submitting.value = true; error.value = ''
   try {
     if (avatarFile.value) {
       const fd = new FormData(); fd.append('avatar', avatarFile.value)
       await apiUpload('/auth/users/me/', fd)
+      await auth.fetchMe()
     }
-    await apiPost('/tutors/onboarding/', {
+    const fd = new FormData()
+    Object.entries({
       headline: form.value.headline, bio: form.value.bio,
       years_experience: form.value.years_experience, hourly_rate: form.value.hourly_rate,
       teaching_style: form.value.teaching_style, city: form.value.city,
       instant_book: form.value.instant_book, trial_lesson_enabled: form.value.trial_lesson_enabled,
-      trial_lesson_price: form.value.trial_lesson_price, subjects: form.value.subjects,
-      education: form.value.education, intro_video_url: form.value.intro_video_url,
-    })
+      trial_lesson_price: form.value.trial_lesson_price,
+      education: JSON.stringify(form.value.education), intro_video_url: form.value.intro_video_url,
+      identity_document_type: form.value.identity_document_type,
+    }).forEach(([key, value]) => fd.append(key, value))
+    form.value.subjects.forEach(subject => fd.append('subjects', subject))
+    fd.append('identity_document', identityFile.value)
+    supportingFiles.value.forEach(file => fd.append('documents', file))
+    fd.append('document_type', 'professional_certificate')
+    await apiUpload('/tutors/onboarding/', fd, 'post')
+    localStorage.removeItem(draftKey.value)
     notifStore.toast('Application submitted! We\'ll review within 24–48h.', 'success')
     setTimeout(() => router.push('/dashboard'), 1800)
   } catch(e) {
@@ -260,7 +332,11 @@ async function submit() {
 }
 
 onMounted(async () => {
-  const { data } = await apiGet('/tutors/subjects/')
-  allSubjects.value = Array.isArray(data) ? data : (data.results || [])
+  const [{ data: subjectsData }, { data: onboardingData }] = await Promise.all([
+    apiGet('/tutors/subjects/'),
+    apiGet('/tutors/onboarding/'),
+  ])
+  allSubjects.value = Array.isArray(subjectsData) ? subjectsData : (subjectsData.results || [])
+  restoreDraft(onboardingData?.profile)
 })
 </script>

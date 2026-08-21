@@ -6,6 +6,7 @@ const routes=[
   {path:'/register',name:'register',component: () => import('@/views/auth/RegisterView.vue'),meta:{guest:true}},
   {path:'/forgot-password',name:'forgot',component: () => import('@/views/auth/ForgotPasswordView.vue'),meta:{guest:true}},
   {path:'/reset-password',name:'reset',component: () => import('@/views/auth/ResetPasswordView.vue'),meta:{guest:true}},
+  {path:'/verify-email',name:'verify-email',component: () => import('@/views/auth/VerifyEmailView.vue')},
   {path:'/how-it-works',name:'how-it-works',component: () => import('@/views/pages/HowItWorksView.vue')},
   {path:'/about',name:'about',component: () => import('@/views/pages/AboutView.vue')},
   {path:'/faq',name:'faq',component: () => import('@/views/pages/FaqView.vue')},
@@ -17,7 +18,7 @@ const routes=[
   {path:'/refund-policy',name:'refund',component: () => import('@/views/pages/StaticPageView.vue'),props:{pageType:'refund'}},
   {path:'/tutors',name:'tutor-search',component: () => import('@/views/tutors/TutorSearchView.vue')},
   {path:'/tutors/:id',name:'tutor-profile',component: () => import('@/views/tutors/TutorProfileView.vue')},
-  {path:'/tutor/:slug',name:'tutor-storefront',component: () => import('@/views/tutors/StorefrontView.vue')},
+  {path:'/tutor/:slug',name:'tutor-public-profile',component: () => import('@/views/tutors/TutorProfileView.vue')},
   {path:'/group-classes',name:'group-classes',component: () => import('@/views/students/GroupClassesView.vue')},
   {path:'/student-onboarding',name:'student-onboarding',component: () => import('@/views/students/StudentOnboardingView.vue'),meta:{auth:true,role:'student'}},
   {path:'/dashboard',name:'dashboard',component: () => import('@/views/dashboard/DashboardView.vue'),meta:{auth:true}},
@@ -53,7 +54,8 @@ const routes=[
   {path:'/admin/exports',name:'admin-exports',component: () => import('@/views/admin/ExportsView.vue'),meta:{auth:true,role:'admin'}},
   {path:'/:pathMatch(.*)*',name:'not-found',redirect:'/'},
 ]
-const router=createRouter({history:createWebHistory(),routes,scrollBehavior:()=>({top:0,behavior:'smooth'})})
+// const router=createRouter({history:createWebHistory('/demo/'),routes,scrollBehavior:()=>({top:0,behavior:'smooth'})}) // sub directory config
+const router=createRouter({history:createWebHistory(''),routes,scrollBehavior:()=>({top:0,behavior:'smooth'})})
 router.beforeEach((to,from,next)=>{
   const auth=useAuthStore()
   if(to.meta.guest&&auth.isAuthenticated)return next({name:'dashboard'})

@@ -42,8 +42,8 @@ const fallbackContent = computed(() => `
 <h3>Introduction</h3>
 <p>This ${title.value} governs your use of the Gooprep platform operated by Sikaba Systems. By using Gooprep, you agree to this policy.</p>
 <h3>Contact Us</h3>
-<p>For questions about this policy, please email <a href="mailto:legal@gooprep.com">legal@gooprep.com</a>.</p>
-<p class="text-muted small mt-4">Gooprep is operated by Sikaba Systems, Accra, Ghana. © 2025 All rights reserved.</p>
+<p>For questions about this policy, please email <a href="mailto:support@gooprep.com">support@gooprep.com</a>.</p>
+<p class="text-muted small mt-4">© 2025 All rights reserved.</p>
 `)
 
 onMounted(async () => {

@@ -10,8 +10,8 @@
     <div class="container py-5">
       <div class="row g-5 align-items-center mb-5">
         <div class="col-lg-6">
-          <h2 class="fw-800 mb-3">Our Mission</h2>
-          <p class="text-muted" style="line-height:1.8">Bridging the Gap Between Students & Educators
+          <h2 class="fw-800 mb-3">Bridging the Gap Between Students & Educators</h2>
+          <p class="text-muted" style="line-height:1.8">
             Gooprep is an innovative tutoring and learning marketplace designed to bridge the gap between students and qualified tutors through technology-driven education.
 
             We provide a platform where students, learners, parents, professionals, and educators can connect seamlessly for online and in-person academic support.</p>
@@ -33,11 +33,20 @@
               <h2>Our Vision</h2>
               <p class="text-muted" style="line-height:1.8">To become Africa’s leading digital tutoring and educational support platform by building a trusted ecosystem where students and educators can teach, learn, and grow together.</p>
             </div>
+            <div class="col-lg-6">
+              <h2>Our Core Values</h2>
+              <p class="text-muted" style="line-height:1.8">
+                <blockquote>
+                  <h3>Excellence:</h3>
+                  Committed to delivering high-quality educational support and exceptional learning experiences that positively impact students and educators.
+              </blockquote>
+            </p>
+            </div>
           </div>
         </div>
       </div>
       <div class="row g-4 mb-5">
-        <div v-for="v in values" :key="v.title" class="col-md-6 col-lg-3">
+        <div v-for="v in values" :key="v.title" class="col-md-6 col-lg-4">
           <div class="gp-card p-4 text-center h-100">
             <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3" :style="`width:60px;height:60px;background:${v.color}20`">
               <i :class="v.icon" :style="`color:${v.color};font-size:1.5rem`"></i>

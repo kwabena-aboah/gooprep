@@ -1,7 +1,10 @@
+import os
 from pathlib import Path
 from decouple import config, Csv
 from datetime import timedelta
 from urllib.parse import urlparse
+import dj_database_url
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config("SECRET_KEY", default="gooprep-dev-secret-2024-change-in-prod")
 DEBUG = config("DEBUG", default=True, cast=bool)
@@ -19,6 +22,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "django_filters",
     "channels",
+    'tinymce',
     "apps.accounts",
     "apps.tutors",
     "apps.students",
@@ -48,20 +52,20 @@ ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 TEMPLATES = [{"BACKEND":"django.template.backends.django.DjangoTemplates","DIRS":[BASE_DIR/"templates"],"APP_DIRS":True,"OPTIONS":{"context_processors":["django.template.context_processors.debug","django.template.context_processors.request","django.contrib.auth.context_processors.auth","django.contrib.messages.context_processors.messages"]}}]
-DATABASE_URL = config('DATABASE_URL', default='sqlite:///db.sqlite3')
-_database_url = urlparse(DATABASE_URL)
-if _database_url.scheme in {'postgres', 'postgresql'}:
-    DATABASES = {'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': _database_url.path.lstrip('/'),
-        'USER': _database_url.username or '',
-        'PASSWORD': _database_url.password or '',
-        'HOST': _database_url.hostname or 'localhost',
-        'PORT': str(_database_url.port or 5432),
-    }}
-else:
-    sqlite_name = _database_url.path.lstrip('/') or 'db.sqlite3'
-    DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': BASE_DIR / sqlite_name}}
+# DATABASE_URL = config('DATABASE_URL', default='')
+# _database_url = urlparse(DATABASE_URL)
+# if _database_url.scheme in {'postgres', 'postgresql'}:
+#     DATABASES = {'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': _database_url.path.lstrip('/'),
+#         'USER': _database_url.username or '',
+#         'PASSWORD': _database_url.password or '',
+#         'HOST': _database_url.hostname or 'localhost',
+#         'PORT': str(_database_url.port or 5432),
+#     }}
+# else:
+#     sqlite_name = _database_url.path.lstrip('/') or 'db.sqlite3'
+#     DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': BASE_DIR / sqlite_name}}
 # DATABASES = {
 #     'default': {
 #         'ENGINE': 'django.db.backends.mysql',
@@ -72,6 +76,14 @@ else:
 #         'PORT': '3306',                   # Default MySQL port
 #     }
 # }
+
+DATABASES = {
+    'default': dj_database_url.config(
+        default=os.environ.get('DATABASE_URL'),
+        conn_max_age=0,
+        ssl_require=True,
+    )
+}
 
 AUTH_USER_MODEL = "accounts.User"
 AUTH_PASSWORD_VALIDATORS = [

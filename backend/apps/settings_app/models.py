@@ -1,4 +1,5 @@
 from django.db import models
+from tinymce.models import HTMLField
 
 class SiteSettings(models.Model):
     site_name       = models.CharField(max_length=100, default='Gooprep')
@@ -62,5 +63,5 @@ class StaticPage(models.Model):
     TYPES = [('privacy','Privacy Policy'),('terms','Terms of Service'),('about','About Us'),('faq','FAQ'),('how_it_works','How It Works'),('ip_policy','IP Policy'),('cookie','Cookie Policy'),('refund','Refund Policy')]
     page_type  = models.CharField(max_length=20, choices=TYPES, unique=True)
     title      = models.CharField(max_length=200)
-    content    = models.TextField()
+    content    = HTMLField()
     updated_at = models.DateTimeField(auto_now=True)

@@ -5,6 +5,7 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('django-admin/', admin.site.urls),
+    path('tinymce/', include('tinymce.urls')),
 
     # Auth & Users
     path('api/auth/',         include('apps.accounts.urls')),

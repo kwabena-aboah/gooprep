@@ -11,16 +11,27 @@
       <div class="row g-5 align-items-center mb-5">
         <div class="col-lg-6">
           <h2 class="fw-800 mb-3">Our Mission</h2>
-          <p class="text-muted" style="line-height:1.8">Gooprep was founded with a simple belief: every Ghanaian student deserves access to a world-class tutor, regardless of location. We connect learners with passionate, verified educators through live virtual classrooms powered by BigBlueButton — all with the convenience of mobile money payments.</p>
-          <p class="text-muted" style="line-height:1.8">Built by Sikaba Systems and deeply rooted in the Ghanaian context, Gooprep understands the local curriculum, payment landscape, and cultural needs of our learners.</p>
+          <p class="text-muted" style="line-height:1.8">Bridging the Gap Between Students & Educators
+            Gooprep is an innovative tutoring and learning marketplace designed to bridge the gap between students and qualified tutors through technology-driven education.
+
+            We provide a platform where students, learners, parents, professionals, and educators can connect seamlessly for online and in-person academic support.</p>
+          <p class="text-muted" style="line-height:1.8">Whether preparing for BECE, WASSCE, university exams, professional certifications, or personal skill development, Gooprep provides a reliable ecosystem that supports learning and academic excellence.</p>
         </div>
         <div class="col-lg-6">
-          <div class="row g-3">
-            <div v-for="s in stats" :key="s.label" class="col-6">
-              <div class="gp-card p-4 text-center">
-                <div class="fw-800 text-gp-primary fs-2">{{ s.value }}</div>
-                <div class="text-muted small">{{ s.label }}</div>
-              </div>
+          <div class="row g-5 align-items-center mb-5">
+            <div class="col-6">
+                <h2 class="fw-800 text-gp-primary fs-2">Our Mission</h2>
+                <p class="text-muted" style="line-height:1.8">To make quality education accessible and affordable by connecting learners with trusted tutors and educational opportunities through a modern and interactive learning platform.
+
+                We aim to simplify learning experiences while promoting academic excellence, digital learning innovation, and educational empowerment across Ghana and beyond.</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="row g-5 align-items-center mb-5">
+            <div class="col-lg-6">
+              <h2>Our Vision</h2>
+              <p class="text-muted" style="line-height:1.8">To become Africa’s leading digital tutoring and educational support platform by building a trusted ecosystem where students and educators can teach, learn, and grow together.</p>
             </div>
           </div>
         </div>
@@ -37,8 +48,8 @@
         </div>
       </div>
       <div class="gp-card p-4 p-md-5 text-center" style="background:linear-gradient(135deg,#111,#1a0800)">
-        <h3 class="text-white fw-800 mb-2">Built in Ghana</h3>
-        <p class="text-white-50 mb-4">Gooprep is proudly built by <strong class="text-white">Gooprep Team</strong>.</p>
+        <h3 class="text-white fw-800 mb-2">A Future Where Education Is Accessible, Engaging, and Transformative for Everyone</h3>
+        <p class="text-white-50 mb-4">Empowering students. Supporting educators. Building futures. <br> <strong class="text-white">Teach. Learn. Grow</strong></p>
         <RouterLink to="/register" class="btn btn-gp px-5">Join Gooprep Today</RouterLink>
       </div>
     </div>
@@ -49,16 +60,16 @@
 <script setup>
 import AppNavbar from '@/components/layout/AppNavbar.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
-const stats = [
-  { value:'50K+',  label:'Active Students' },
-  { value:'2,000+',label:'Verified Tutors' },
-  { value:'100K+', label:'Lessons Completed' },
-  { value:'4.9★',  label:'Average Rating' },
-]
+// const stats = [
+//   { value:'50K+',  label:'Active Students' },
+//   { value:'2,000+',label:'Verified Tutors' },
+//   { value:'100K+', label:'Lessons Completed' },
+//   { value:'4.9★',  label:'Average Rating' },
+// ]
 const values = [
-  { icon:'bi bi-shield-check',   color:'#10b981', title:'Verified Tutors',   desc:'Every tutor is background-checked and manually reviewed before going live.' },
-  { icon:'bi bi-lock',           color:'#6366f1', title:'Secure Payments',   desc:'All transactions are encrypted and processed via Paystack.' },
-  { icon:'bi bi-people',         color:'#e63900', title:'Ghana-First',       desc:'Designed for the Ghanaian curriculum, culture, and payment ecosystem.' },
-  { icon:'bi bi-robot',          color:'#f59e0b', title:'AI-Powered',        desc:'AI summaries, flashcards, and quizzes automatically generated from every lesson.' },
+  { icon:'bi bi-shield-check',   color:'#10b981', title:'Teach',   desc:'Connecting students with passionate and qualified educators dedicated to sharing knowledge and guiding learners toward success.' },
+  { icon:'bi bi-lock',           color:'#6366f1', title:'Learn',   desc:'Learning should be engaging, personalized, and accessible to everyone regardless of location or background.' },
+  { icon:'bi bi-people',         color:'#e63900', title:'Grow',       desc:'Personal, academic, and professional development through quality education, mentorship, and continuous improvement.' },
+  // { icon:'bi bi-robot',          color:'#f59e0b', title:'AI-Powered',        desc:'AI summaries, flashcards, and quizzes automatically generated from every lesson.' },
 ]
 </script>

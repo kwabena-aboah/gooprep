@@ -12,7 +12,7 @@
               Learn From <span style="background:linear-gradient(135deg,var(--gp-red),var(--gp-amber));-webkit-background-clip:text;-webkit-text-fill-color:transparent">Expert Tutors</span><br>Anytime, Anywhere
             </h1>
             <p class="text-white-50 mb-4" style="font-size:1.1rem;line-height:1.7">
-              Connect with verified Ghanaian tutors via live BigBlueButton classrooms. Pay securely with MTN MoMo, AirtelTigo, or Telecel Cash.
+              Connect with verified Ghanaian tutors via live VirtualClassrooms. Pay securely with MTN MoMo, AirtelTigo, or Telecel Cash.
             </p>
             <div class="d-flex gap-3 flex-wrap mb-5">
               <RouterLink to="/register" class="btn btn-gp btn-lg px-4"><i class="bi bi-rocket-takeoff me-2"></i>Get Started Free</RouterLink>

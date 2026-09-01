@@ -24,6 +24,10 @@ class StudentProfileView(APIView):
         return Response({
             'id': request.user.id,
             'full_name': request.user.get_full_name(),
+            'phone': request.user.phone,
+            'address': request.user.address,
+            'date_of_birth': request.user.date_of_birth,
+            'gender': request.user.gender,
             'email': request.user.email,
             'avatar_url': request.user.get_avatar_url(),
             'city': request.user.city,
@@ -49,7 +53,7 @@ class StudentProfileView(APIView):
 
     def patch(self, request):
         profile, _ = StudentProfile.objects.get_or_create(user=request.user)
-        user_fields = ['city', 'country', 'bio', 'timezone', 'language', 'date_of_birth']
+        user_fields = ['city', 'address', 'country', 'bio', 'timezone', 'language', 'date_of_birth', 'gender']
         changed_fields = []
         for field in user_fields:
             if field in request.data:

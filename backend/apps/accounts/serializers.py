@@ -13,7 +13,7 @@ class UserSerializer(serializers.ModelSerializer):
         model  = User
         fields = [
             'id','email','first_name','last_name','full_name','role','phone','bio',
-            'avatar','avatar_url','city','country','timezone','language','subscription_plan',
+            'avatar','avatar_url','city','address','country','date_of_birth','gender','timezone','language',
             'total_points','level','streak_days','notify_email','notify_sms',
             'notify_push','notify_whatsapp','date_joined','last_login','is_active',
             'was_referred','referrer_name','referrer_notes','email_verified',
@@ -31,11 +31,19 @@ class RegisterSerializer(serializers.ModelSerializer):
     was_referred    = serializers.BooleanField(required=False, default=False)
     referrer_name   = serializers.CharField(required=False, allow_blank=True, max_length=200, default='')
     referrer_notes  = serializers.CharField(required=False, allow_blank=True, max_length=500, default='')
+    institution_name = serializers.CharField(required=False, allow_blank=True, max_length=200)
+    phone = serializers.CharField(required=True, allow_blank=False, max_length=30)
 
     class Meta:
         model  = User
         fields = ['email','first_name','last_name','phone','role','username',
-                  'password','password2','was_referred','referrer_name','referrer_notes']
+                  'password','password2','was_referred','referrer_name','referrer_notes','institution_name']
+
+    def validate_phone(self, value):
+        normalized = (value or '').strip()
+        if not normalized:
+            raise serializers.ValidationError('Phone number is required.')
+        return normalized
 
     def validate_email(self, v):
         if User.objects.filter(email=v.lower()).exists():
@@ -47,15 +55,21 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'password': 'Passwords do not match.'})
         if data.get('was_referred') and not data.get('referrer_name', '').strip():
             raise serializers.ValidationError({'referrer_name': "Please enter the referrer's name."})
+        if data.get('role') == 'institution' and not data.get('institution_name', '').strip():
+            raise serializers.ValidationError({'institution_name': 'Institution name is required.'})
         return data
 
     def create(self, validated_data):
         pw = validated_data.pop('password')
+        institution_name = validated_data.pop('institution_name', '').strip()
         user = User(**validated_data)
         user.set_password(pw)
         user.save()
 
-        if user.role == 'student':
+        if user.role == 'institution':
+            from apps.institutions.models import Institution
+            Institution.objects.create(owner=user, name=institution_name)
+        elif user.role == 'student':
             from apps.students.models import StudentProfile
             StudentProfile.objects.get_or_create(
                 user=user,

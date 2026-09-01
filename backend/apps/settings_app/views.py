@@ -51,8 +51,8 @@ class SiteSettingsView(APIView):
                 'guppy_app_id':        s.guppy_app_id,
                 'guppy_api_key':       s.guppy_api_key,
                 'guppy_webhook_secret':s.guppy_webhook_secret,
-                'bbb_url':             s.bbb_url,
-                'bbb_secret':          s.bbb_secret,
+                'bbb_url':             s.bbb_url or getattr(settings, 'BBB_URL', ''),
+                'bbb_secret':          s.bbb_secret or getattr(settings, 'BBB_KEY', ''),
                 'min_payout':          str(s.min_payout),
                 'escrow_release_hours':s.escrow_release_hours,
                 'cancellation_hours':  s.cancellation_hours,
@@ -132,18 +132,39 @@ class BBBTestView(APIView):
     permission_classes = [permissions.IsAdminUser]
 
     def post(self, request):
-        import hashlib, urllib.request
-        url    = request.data.get('url', '')
-        secret = request.data.get('secret', '')
-        if not url:
-            return Response({'success': False, 'error': 'URL required.'})
+        from sage_bbb.services.client import BigBlueButtonClient
+        url = (request.data.get('url') or getattr(settings, 'BBB_URL', '')).strip()
+        secret = (request.data.get('secret') or getattr(settings, 'BBB_KEY', '')).strip()
+        if not url or not secret:
+            return Response({'success': False, 'error': 'BBB URL and key are required.'}, status=400)
         try:
-            checksum = hashlib.sha1(f'getMeetingInfo{secret}'.encode()).hexdigest()
-            with urllib.request.urlopen(f'{url}getMeetingInfo?checksum={checksum}', timeout=5):
-                pass
-            return Response({'success': True})
-        except Exception as e:
-            return Response({'success': False, 'error': str(e)})
+            client = BigBlueButtonClient(url, secret)
+            connection = client.check_connection()
+            connection_data = connection if isinstance(connection, dict) else getattr(connection, '__dict__', {})
+            connection_ok = str(connection_data.get('returncode', connection_data.get('returnCode', ''))).upper() in {'SUCCESS', 'OK', 'TRUE'}
+
+            meetings = client.meetings.get_meetings()
+            meetings_ok = str(meetings.get('returncode', '')).upper() == 'SUCCESS'
+
+            # Use a harmless nonexistent ID: this validates request signing
+            # without creating a room or touching an existing recording.
+            recordings = client.recordings.get_recordings('gooprep-connection-probe')
+            recordings_ok = str(recordings.get('returncode', '')).upper() == 'SUCCESS'
+
+            success = connection_ok and meetings_ok and recordings_ok
+            return Response({
+                'success': success,
+                'connection_ok': connection_ok,
+                'meetings_ok': meetings_ok,
+                'recordings_ok': recordings_ok,
+                'message': '' if success else 'BBB API authentication failed for one or more operational calls.',
+                'details': {
+                    'meetings': meetings.get('message', ''),
+                    'recordings': recordings.get('message', ''),
+                },
+            }, status=200)
+        except Exception as exc:
+            return Response({'success': False, 'error': str(exc)}, status=200)
 
 
 class HealthView(APIView):

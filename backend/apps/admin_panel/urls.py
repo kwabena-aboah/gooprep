@@ -1,12 +1,11 @@
 from django.urls import path
+
 from .views import (
     AdminStatsView, AdminUserListView, AdminReferralListView, toggle_user_active,
-    AdminTutorListView, approve_tutor,
-    StudentApprovalListView, approve_student,
-    AdminRevenueView, AdminTransactionListView,
-    AdminDisputeListView, resolve_dispute,
-    AdminModerationListView, moderation_action,
-    BBBStatusView, AdminBBBView,
+    AdminTutorListView, approve_tutor, StudentApprovalListView, approve_student,
+    InstitutionApprovalListView, approve_institution, AdminRevenueView,
+    AdminTransactionListView, AdminDisputeListView, resolve_dispute,
+    AdminModerationListView, moderation_action, BBBStatusView, AdminBBBView,
     bbb_rooms, bbb_recordings, bbb_end_meeting, bbb_delete_recording,
 )
 from .export_routes import export_report
@@ -20,6 +19,8 @@ urlpatterns = [
     path('tutors/<int:tutor_id>/approve/', approve_tutor, name='approve_tutor'),
     path('students/', StudentApprovalListView.as_view(), name='admin_students'),
     path('students/<int:student_id>/approve/', approve_student, name='approve_student'),
+    path('institutions/', InstitutionApprovalListView.as_view(), name='admin_institutions'),
+    path('institutions/<int:institution_id>/approve/', approve_institution, name='approve_institution'),
     path('revenue/', AdminRevenueView.as_view(), name='admin_revenue'),
     path('transactions/', AdminTransactionListView.as_view(), name='admin_txns'),
     path('disputes/', AdminDisputeListView.as_view(), name='admin_disputes'),

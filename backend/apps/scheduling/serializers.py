@@ -1,23 +1,26 @@
+from django.utils import timezone
 from rest_framework import serializers
-from django.contrib.auth import get_user_model
 
 from .models import Lesson
 
 
-User = get_user_model()
-
-
 class LessonSerializer(serializers.ModelSerializer):
-    tutor_id = serializers.ReadOnlyField(source="tutor.id")
-    student_id = serializers.ReadOnlyField(source="student.id")
-    subject_id = serializers.ReadOnlyField(source="subject.id")
+    subject_name = serializers.ReadOnlyField()
+    tutor_name = serializers.ReadOnlyField()
+    student_name = serializers.ReadOnlyField()
 
-    tutor_name = serializers.SerializerMethodField()
-    student_name = serializers.SerializerMethodField()
-    subject_name = serializers.SerializerMethodField()
+    is_upcoming = serializers.SerializerMethodField()
+    is_live = serializers.ReadOnlyField()
 
-    tutor_avatar = serializers.SerializerMethodField()
-    student_avatar = serializers.SerializerMethodField()
+    bbb_tutor_join_url = serializers.SerializerMethodField()
+    bbb_student_join_url = serializers.SerializerMethodField()
+    bbb_status = serializers.SerializerMethodField()
+    bbb_created_at = serializers.SerializerMethodField()
+    bbb_started_at = serializers.SerializerMethodField()
+    bbb_ended_at = serializers.SerializerMethodField()
+    bbb_recordings = serializers.SerializerMethodField()
+    bbb_available = serializers.SerializerMethodField()
+    can_join = serializers.SerializerMethodField()
 
     class Meta:
         model = Lesson
@@ -25,22 +28,15 @@ class LessonSerializer(serializers.ModelSerializer):
         fields = [
             "id",
 
-            # Relationships
+            # Participants
             "tutor",
             "student",
-            "subject",
-
-            # Relationship IDs
-            "tutor_id",
-            "student_id",
-            "subject_id",
-
-            # Display information
             "tutor_name",
             "student_name",
+
+            # Subject
+            "subject",
             "subject_name",
-            "tutor_avatar",
-            "student_avatar",
 
             # Lesson
             "lesson_type",
@@ -49,107 +45,189 @@ class LessonSerializer(serializers.ModelSerializer):
             "end_time",
             "duration_minutes",
             "topic",
-            "price",
-            "currency",
 
             # Payment
+            "price",
+            "currency",
             "payment_status",
+
+            # BBB
+            "bbb_meeting_id",
+            "bbb_tutor_join_url",
+            "bbb_student_join_url",
+            "bbb_status",
+            "bbb_created_at",
+            "bbb_started_at",
+            "bbb_ended_at",
 
             # Recording
             "record_session",
             "recording_available",
             "recording_url",
+            "bbb_recordings",
 
-            # Review / AI
-            "has_review",
+            # AI
             "ai_summary",
             "ai_flashcards",
             "ai_quiz",
 
-            # Meeting
-            "bbb_meeting_id",
+            # Review
+            "has_review",
 
-            # Booking on behalf
+            # Booking
             "booked_on_behalf",
             "booker_name",
             "booker_relationship",
             "booker_phone",
             "booker_email",
 
-            # Other
             "notes",
+
+            # Computed
+            "is_upcoming",
+            "is_live",
+            "bbb_available",
+            "can_join",
+
             "created_at",
             "updated_at",
         ]
 
         read_only_fields = [
             "id",
-            "tutor_id",
-            "student_id",
-            "subject_id",
-
             "tutor_name",
             "student_name",
             "subject_name",
-            "tutor_avatar",
-            "student_avatar",
 
-            "status",
-            "payment_status",
+            "bbb_meeting_id",
+            "bbb_tutor_join_url",
+            "bbb_student_join_url",
+            "bbb_status",
+            "bbb_created_at",
+            "bbb_started_at",
+            "bbb_ended_at",
+
             "recording_available",
             "recording_url",
-            "has_review",
+            "bbb_recordings",
+
             "ai_summary",
             "ai_flashcards",
             "ai_quiz",
-            "bbb_meeting_id",
+
+            "has_review",
 
             "created_at",
             "updated_at",
         ]
 
-    def get_tutor_name(self, obj):
-        if not obj.tutor:
-            return ""
+    def get_is_upcoming(self, obj):
+        return bool(
+            obj.start_time
+            and obj.start_time >= timezone.now()
+            and obj.status not in {"cancelled", "completed", "no_show"}
+        )
 
-        return obj.tutor.get_full_name() or obj.tutor.username
+    def get_bbb_tutor_join_url(self, obj):
+        return obj.bbb_join_url if obj.bbb_meeting_id else ""
 
-    def get_student_name(self, obj):
-        if not obj.student:
-            return ""
+    def get_bbb_student_join_url(self, obj):
+        # Join URLs are generated per request so passwords are never stored.
+        return "" if not obj.bbb_meeting_id else obj.bbb_join_url
 
-        return obj.student.get_full_name() or obj.student.username
+    def get_bbb_status(self, obj):
+        if not obj.bbb_meeting_id:
+            return "not_created"
+        if obj.status in {"completed", "cancelled", "no_show"}:
+            return "ended"
+        return "created"
 
-    def get_subject_name(self, obj):
-        if not obj.subject:
-            return "Tutoring Session"
+    def get_bbb_created_at(self, obj):
+        return obj.updated_at if obj.bbb_meeting_id else None
 
-        return obj.subject.name
-
-    def get_tutor_avatar(self, obj):
-        if not obj.tutor:
-            return None
-
-        method = getattr(obj.tutor, "get_avatar_url", None)
-
-        if callable(method):
-            try:
-                return method()
-            except Exception:
-                return None
-
+    def get_bbb_started_at(self, obj):
         return None
 
-    def get_student_avatar(self, obj):
-        if not obj.student:
-            return None
+    def get_bbb_ended_at(self, obj):
+        return obj.updated_at if obj.status == "completed" else None
 
-        method = getattr(obj.student, "get_avatar_url", None)
+    def get_bbb_recordings(self, obj):
+        return []
 
-        if callable(method):
-            try:
-                return method()
-            except Exception:
-                return None
+    def get_bbb_available(self, obj):
+        return bool(
+            obj.bbb_meeting_id
+            and obj.status not in {"completed", "cancelled", "no_show"}
+        )
 
-        return None
+    def get_can_join(self, obj):
+        if not obj.bbb_meeting_id:
+            return False
+        if obj.status in {"cancelled", "completed", "no_show"}:
+            return False
+        return timezone.now() >= obj.start_time - timedelta(minutes=10)
+
+    def validate(self, attrs):
+
+        start_time = attrs.get(
+            "start_time",
+            getattr(
+                self.instance,
+                "start_time",
+                None,
+            ),
+        )
+
+        end_time = attrs.get(
+            "end_time",
+            getattr(
+                self.instance,
+                "end_time",
+                None,
+            ),
+        )
+
+        if start_time and end_time:
+            if end_time <= start_time:
+                raise serializers.ValidationError(
+                    {
+                        "end_time": (
+                            "End time must be after "
+                            "start time."
+                        )
+                    }
+                )
+
+        return attrs
+
+
+class LessonListSerializer(serializers.ModelSerializer):
+    subject_name = serializers.ReadOnlyField()
+    tutor_name = serializers.ReadOnlyField()
+    student_name = serializers.ReadOnlyField()
+    is_live = serializers.ReadOnlyField()
+    bbb_status = serializers.SerializerMethodField()
+    can_join = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Lesson
+        fields = [
+            "id", "tutor", "student", "tutor_name", "student_name",
+            "subject", "subject_name", "lesson_type", "status",
+            "start_time", "end_time", "duration_minutes", "topic",
+            "price", "currency", "payment_status", "bbb_status",
+            "bbb_meeting_id", "recording_available", "is_live", "can_join",
+            "created_at",
+        ]
+
+    def get_bbb_status(self, obj):
+        if not obj.bbb_meeting_id:
+            return "not_created"
+        return "ended" if obj.status in {"completed", "cancelled", "no_show"} else "created"
+
+    def get_can_join(self, obj):
+        return bool(
+            obj.bbb_meeting_id
+            and obj.status not in {"completed", "cancelled", "no_show"}
+            and timezone.now() >= obj.start_time - timedelta(minutes=10)
+        )

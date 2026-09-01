@@ -209,7 +209,7 @@ async function viewDetail(l) {
 
 async function viewRecording(l) {
   try {
-    const { data } = await apiGet(`/scheduling/lessons/${l.id}/recordings/`)
+    const { data } = await apiGet(`/scheduling/lessons/${l.id}/bbb/recordings/`)
     if (data.recordings?.length) window.open(data.recordings[0].playback_url, '_blank')
     else notifStore.toast('Recording not yet available.', 'warning')
   } catch { notifStore.toast('Could not load recording.', 'error') }

@@ -40,7 +40,8 @@ class RegisterView(generics.CreateAPIView):
     @staticmethod
     def _send_verification_email(user):
         token = EmailVerificationToken.objects.create(user=user, token=uuid.uuid4().hex)
-        verify_url = f'{settings.FRONTEND_URL}/verify-email?token={token.token}'
+        frontend_url = settings.FRONTEND_URL or 'http://localhost:5173'
+        verify_url = f'{frontend_url}/verify-email?token={token.token}'
         send_mail(
             'Verify your Gooprep email address',
             f'Welcome to Gooprep! Verify your email within 24 hours: {verify_url}',
@@ -128,9 +129,16 @@ def verify_email(request):
 def resend_verification_email(request):
     if request.user.email_verified:
         return Response({'detail': 'Email is already verified.'})
+    EmailVerificationToken.objects.filter(user=request.user, used=False).update(used=True)
     token = EmailVerificationToken.objects.create(user=request.user, token=uuid.uuid4().hex)
-    verify_url = f'{settings.FRONTEND_URL}/verify-email?token={token.token}'
-    send_mail('Verify your Gooprep email address', f'Verify your email within 24 hours: {verify_url}', settings.DEFAULT_FROM_EMAIL, [request.user.email], fail_silently=False)
+    frontend_url = settings.FRONTEND_URL or 'http://localhost:5173'
+    verify_url = f'{frontend_url}/verify-email?token={token.token}'
+    try:
+        send_mail('Verify your Gooprep email address', f'Verify your email within 24 hours: {verify_url}', settings.DEFAULT_FROM_EMAIL, [request.user.email], fail_silently=False)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception('Verification resend failed for user %s', request.user.pk)
+        return Response({'sent': False, 'detail': 'Email delivery is temporarily unavailable.'}, status=503)
     return Response({'sent': True})
 
 

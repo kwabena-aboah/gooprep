@@ -143,8 +143,8 @@ async function save() {
 async function testBBB() {
   testingBBB.value = true; bbbResult.value = null
   try {
-    const { data } = await apiPost('/settings/bbb/test/', { url: s.value.bbb_url, secret: s.value.bbb_key })
-    bbbResult.value = { ok: data.success, msg: data.success ? 'Connected ✓' : data.message || data.error || 'Failed' }
+    const { data } = await apiPost('/settings/bbb/test/', { url: s.value.bbb_url, secret: s.value.bbb_key || s.value.bbb_secret })
+    bbbResult.value = { ok: data.success, msg: data.success ? 'All BBB APIs connected ✓' : `${data.message || 'BBB test failed'} Meetings: ${data.details?.meetings || 'not tested'}. Recordings: ${data.details?.recordings || 'not tested'}` }
     health.value.find(h=>h.label==='BBB').ok = data.success
     health.value.find(h=>h.label==='BBB').value = data.success ? 'Online' : 'Offline'
   } catch { bbbResult.value = { ok: false, msg: 'Connection failed' } }

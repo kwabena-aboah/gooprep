@@ -43,6 +43,10 @@
                 <i class="bi bi-person-badge text-gp-primary"></i>Tutor Approvals
                 <span v-if="s.pending_approvals" class="badge bg-danger ms-auto">{{ s.pending_approvals }}</span>
               </RouterLink>
+              <RouterLink to="/admin/institutions" class="btn btn-outline-secondary btn-sm text-start d-flex align-items-center gap-2">
+                <i class="bi bi-building text-gp-primary"></i>Institution Approvals
+                <span v-if="s.pending_institution_approvals" class="badge bg-danger ms-auto">{{ s.pending_institution_approvals }}</span>
+              </RouterLink>
               <RouterLink to="/admin/disputes" class="btn btn-outline-secondary btn-sm text-start d-flex align-items-center gap-2">
                 <i class="bi bi-exclamation-triangle text-warning"></i>Open Disputes
                 <span v-if="s.open_disputes" class="badge bg-warning text-dark ms-auto">{{ s.open_disputes }}</span>
@@ -122,7 +126,7 @@ const bbbOnline   = ref(false)
 const recentUsers = ref([])
 const recentLessons = ref([])
 const revenueChart= ref([])
-const s           = ref({ users:0, tutors:0, students:0, lessons:0, revenue:'0.00', pending_approvals:0, open_disputes:0, pending_reviews:0 })
+const s           = ref({ users:0, tutors:0, students:0, lessons:0, revenue:'0.00', pending_approvals:0, pending_institution_approvals:0, open_disputes:0, pending_reviews:0 })
 const fallback    = n => `https://ui-avatars.com/api/?name=${encodeURIComponent(n||'U')}&background=e2e8f0&color=64748b`
 
 async function fetchStats() {

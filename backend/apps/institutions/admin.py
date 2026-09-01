@@ -3,8 +3,8 @@ from .models import Institution, InstitutionMember
 
 @admin.register(Institution)
 class InstitutionAdmin(admin.ModelAdmin):
-    list_display  = ('name','owner','type','is_verified','created_at')
-    list_filter   = ('type','is_verified')
+    list_display  = ('name','owner','type','approval_status','is_verified','reviewed_at','created_at')
+    list_filter   = ('type','approval_status','is_verified')
     search_fields = ('name','owner__email')
     raw_id_fields = ('owner',)
 

@@ -7,8 +7,15 @@ import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config("SECRET_KEY", default="gooprep-dev-secret-2024-change-in-prod")
+# DEBUG = config("DEBUG", default=True, cast=bool)
+# ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="127.0.0.1,.vercel.app", cast=Csv())
+# SECRET_KEY = config("SECRET_KEY", default="gooprep-dev-secret-2024-change-in-prod")
 DEBUG = config("DEBUG", default=True, cast=bool)
-ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="127.0.0.1,.vercel.app", cast=Csv())
+ALLOWED_HOSTS = config(
+    "ALLOWED_HOSTS",
+    default="localhost,127.0.0.1,[::1]",
+    cast=Csv(),
+)
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -52,38 +59,23 @@ ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 TEMPLATES = [{"BACKEND":"django.template.backends.django.DjangoTemplates","DIRS":[BASE_DIR/"templates"],"APP_DIRS":True,"OPTIONS":{"context_processors":["django.template.context_processors.debug","django.template.context_processors.request","django.contrib.auth.context_processors.auth","django.contrib.messages.context_processors.messages"]}}]
-# DATABASE_URL = config('DATABASE_URL', default='')
-# _database_url = urlparse(DATABASE_URL)
-# if _database_url.scheme in {'postgres', 'postgresql'}:
-#     DATABASES = {'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': _database_url.path.lstrip('/'),
-#         'USER': _database_url.username or '',
-#         'PASSWORD': _database_url.password or '',
-#         'HOST': _database_url.hostname or 'localhost',
-#         'PORT': str(_database_url.port or 5432),
-#     }}
-# else:
-#     sqlite_name = _database_url.path.lstrip('/') or 'db.sqlite3'
-#     DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': BASE_DIR / sqlite_name}}
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.mysql',
-#         'NAME': 'gooprep_new_db',      # Replace with your actual DB Name
-#         'USER': 'gooprep_new_db_user',      # Replace with your actual DB User
-#         'PASSWORD': '@g00prep26',   # Replace with your actual DB Password
-#         'HOST': '127.0.0.1',              # Keep localhost for shared hosting
-#         'PORT': '3306',                   # Default MySQL port
-#     }
-# }
+DATABASE_URL = config('DATABASE_URL', default='').strip()
 
-DATABASES = {
-    'default': dj_database_url.config(
-        default=os.environ.get('DATABASE_URL'),
-        conn_max_age=0,
-        ssl_require=True,
-    )
-}
+if DATABASE_URL and '://' in DATABASE_URL:
+    DATABASES = {
+        'default': dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=600,
+            ssl_require=not DEBUG,
+        )
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 AUTH_USER_MODEL = "accounts.User"
 AUTH_PASSWORD_VALIDATORS = [
@@ -189,13 +181,16 @@ EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
 FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:5173")
 PAYSTACK_PUBLIC_KEY = config("PAYSTACK_PUBLIC_KEY", default="")
 PAYSTACK_SECRET_KEY = config("PAYSTACK_SECRET_KEY", default="")
-BBB_URL              = config("BBB_URL", default="")
-# BBB_KEY is the shared secret used to sign BigBlueButton API requests.
-# BBB_SECRET remains supported for existing deployments.
-BBB_KEY              = config("BBB_KEY", default=config("BBB_SECRET", default=""))
-BBB_SECRET           = BBB_KEY
-BBB_API_URL = BBB_URL
-BBB_SECRET_KEY = BBB_SECRET
+BBB_URL = config("BBB_URL", default="").strip()
+BBB_KEY = config("BBB_KEY", default="").strip()
+BBB_LOGO_URL = config("BBB_LOGO_URL", default="").strip()
+
+BBB_MAX_PARTICIPANTS = int(
+    os.getenv(
+        "BBB_MAX_PARTICIPANTS",
+        "10",
+    )
+)
 GUPPY_ENABLED        = config("GUPPY_ENABLED", default=False, cast=bool)
 GUPPY_API_URL        = config("GUPPY_API_URL", default="https://api.guppymessenger.com/v1")
 GUPPY_APP_ID         = config("GUPPY_APP_ID", default="")

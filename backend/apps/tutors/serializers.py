@@ -36,7 +36,7 @@ class TutorProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TutorProfile
-        fields = ['id','user_id','full_name','email','phone','avatar_url','city','country',
+        fields = ['id','user_id','full_name','email','phone','avatar_url','city','country','address','date_of_birth','gender',
                   'headline','bio','years_experience','hourly_rate','teaching_style',
                   'trial_lesson_enabled','trial_lesson_price','instant_book','slug',
                   'average_rating','total_reviews','total_lessons','total_students',
@@ -56,6 +56,12 @@ class TutorProfileSerializer(serializers.ModelSerializer):
 
     def get_verification_documents(self, obj):
         request = self.context.get('request')
+        if not request or not request.user.is_staff:
+            return []
+        return UserDocumentSerializer(
+            obj.user.verification_documents.all(), many=True, context=self.context
+        ).data
+
         if not request or not request.user.is_staff:
             return []
         return UserDocumentSerializer(

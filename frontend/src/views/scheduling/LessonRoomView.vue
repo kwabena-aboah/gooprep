@@ -133,21 +133,27 @@ function connectWS() {
 async function joinRoom() {
   joinLoading.value = true; error.value = ''
   try {
-    const { data } = await apiPost(`/scheduling/lessons/${lessonId}/join/`)
+    if (auth.isTutor && !lesson.value?.bbb_meeting_id) {
+      const { data: provisioned } = await apiPost(`/scheduling/lessons/${lessonId}/bbb/provision/`)
+      if (provisioned?.meeting_id) {
+        lesson.value.bbb_meeting_id = provisioned.meeting_id
+      }
+    }
+    const { data } = await apiPost(`/scheduling/lessons/${lessonId}/bbb/join/`)
     if (data?.join_url) {
       joinUrl.value = data.join_url; joined.value = true; isLive.value = true
       const start = Date.now()
       elapsedTimer = setInterval(() => { elapsed.value = fmt(Math.floor((Date.now()-start)/1000)) }, 1000)
       connectWS()
     } else { error.value = data?.error || 'Could not get classroom link.' }
-  } catch(e) { error.value = e.response?.data?.error || 'Failed to connect. Please try again.' }
+  } catch(e) { error.value = e.response?.data?.detail || e.response?.data?.error || 'Failed to connect. Please try again.' }
   finally { joinLoading.value = false }
 }
 
 async function endOrExit() {
   if (auth.isTutor) {
     if (!confirm('End this lesson for all participants?')) return
-    try { await apiPost(`/scheduling/lessons/${lessonId}/end/`) } catch {}
+    try { await apiPost(`/scheduling/lessons/${lessonId}/bbb/end/`) } catch {}
   }
   router.push('/lessons')
 }

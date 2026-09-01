@@ -50,9 +50,15 @@
           </select>
         </div>
         <div class="col-md-6">
-          <label class="form-label small fw-600">City</label>
-          <input class="form-control" v-model="form.city" placeholder="Accra, Kumasi…" />
+          <label class="form-label small fw-600">Date of birth *</label>
+          <input type="date" class="form-control" v-model="form.date_of_birth" required />
         </div>
+        <div class="col-md-6">
+          <label class="form-label small fw-600">Gender *</label>
+          <select class="form-select" v-model="form.gender" required><option value="">Select gender</option><option>Female</option><option>Male</option><option>Non-binary</option><option>Prefer not to say</option></select>
+        </div>
+        <div class="col-md-6"><label class="form-label small fw-600">City *</label><input class="form-control" v-model="form.city" required placeholder="Accra, Kumasi…" /></div>
+        <div class="col-md-6"><label class="form-label small fw-600">Address *</label><input class="form-control" v-model="form.address" required placeholder="Residential address" /></div>
         <div class="col-12">
           <label class="form-label small fw-600">Bio *</label>
           <textarea class="form-control" rows="5" v-model="form.bio"
@@ -284,7 +290,7 @@ const embedUrl = computed(() => {
 })
 
 const stepValid = computed(() => {
-  if (step.value===0) return form.value.headline && form.value.hourly_rate>0 && form.value.bio.length>=100
+  if (step.value===0) return form.value.headline && form.value.hourly_rate>0 && form.value.bio.length>=100 && form.value.date_of_birth && form.value.gender && form.value.city && form.value.address
   if (step.value===1) return form.value.subjects.length>0
   if (step.value===3) return !!form.value.identity_document_type && !!identityFile.value
   return true
@@ -312,7 +318,8 @@ async function submit() {
     Object.entries({
       headline: form.value.headline, bio: form.value.bio,
       years_experience: form.value.years_experience, hourly_rate: form.value.hourly_rate,
-      teaching_style: form.value.teaching_style, city: form.value.city,
+      teaching_style: form.value.teaching_style, city: form.value.city, address: form.value.address,
+      date_of_birth: form.value.date_of_birth, gender: form.value.gender,
       instant_book: form.value.instant_book, trial_lesson_enabled: form.value.trial_lesson_enabled,
       trial_lesson_price: form.value.trial_lesson_price,
       education: JSON.stringify(form.value.education), intro_video_url: form.value.intro_video_url,

@@ -236,6 +236,15 @@ def tutor_onboarding(request):
         tp = TutorProfile.objects.create(user=request.user, slug=slug)
 
     boolean_fields = {'instant_book', 'trial_lesson_enabled'}
+    user_fields = ['city', 'address', 'country', 'date_of_birth', 'gender']
+    changed_user_fields = []
+    for field in user_fields:
+        if field in request.data:
+            setattr(request.user, field, request.data[field])
+            changed_user_fields.append(field)
+    if changed_user_fields:
+        request.user.save(update_fields=changed_user_fields)
+
     for f in ['headline','bio','years_experience','hourly_rate','teaching_style',
               'instant_book','trial_lesson_enabled','trial_lesson_price','intro_video_url','education','certifications','identity_document_type']:
         if f in request.data:

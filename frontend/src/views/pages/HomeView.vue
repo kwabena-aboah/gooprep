@@ -130,7 +130,6 @@
         <p class="text-white-50 mb-4">Book your first trial lesson from GHS 30 · No subscription required</p>
         <div class="d-flex gap-3 justify-content-center flex-wrap">
           <RouterLink to="/register" class="btn btn-gp btn-lg px-5"><i class="bi bi-rocket-takeoff me-2"></i>Sign Up Free</RouterLink>
-          <RouterLink to="/subscription" class="btn btn-outline-light btn-lg px-5">View Plans</RouterLink>
         </div>
       </div>
     </section>

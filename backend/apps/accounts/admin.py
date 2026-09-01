@@ -10,7 +10,7 @@ class UserAdmin(BaseUserAdmin):
     ordering      = ('-date_joined',)
     fieldsets = (
         (None, {'fields': ('email','username','password')}),
-        ('Personal', {'fields': ('first_name','last_name','phone','bio','avatar','avatar_url','city','country','date_of_birth')}),
+        ('Personal', {'fields': ('first_name','last_name','phone','bio','avatar','avatar_url','city','address','country','date_of_birth','gender')}),
         ('Platform', {'fields': ('role','subscription_plan','subscription_expires','timezone','language','guppy_user_id')}),
         ('Gamification', {'fields': ('total_points','level','streak_days','last_active')}),
         ('Notifications', {'fields': ('notify_email','notify_sms','notify_push','notify_whatsapp')}),

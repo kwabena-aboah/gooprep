@@ -3,8 +3,8 @@
     <AppNavbar @toggle-sidebar="() => {}" />
     <div class="py-5" style="background:linear-gradient(135deg,#111,#1a0800)">
       <div class="container text-center py-4">
-        <h1 class="text-white fw-800 mb-2">Plans & Pricing</h1>
-        <p class="text-white-50">Start free — upgrade when you're ready</p>
+        <h1 class="text-white fw-800 mb-2">Gooprep Access</h1>
+        <p class="text-white-50">All learning features are included. You only pay when booking a tutor.</p>
         <div class="d-inline-flex gap-2 mt-3 p-1 rounded-pill" style="background:rgba(255,255,255,.1)">
           <button class="btn btn-sm rounded-pill px-4" :class="billing==='monthly'?'btn-gp':'text-white-50'" @click="billing='monthly'">Monthly</button>
           <button class="btn btn-sm rounded-pill px-4" :class="billing==='annual'?'btn-gp':'text-white-50'" @click="billing='annual'">Annual <span class="badge bg-success ms-1">-20%</span></button>

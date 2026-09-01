@@ -34,6 +34,7 @@ class AdminStatsView(APIView):
     def get(self, request):
         from django.contrib.auth import get_user_model
         from apps.scheduling.models import Lesson
+        from apps.institutions.models import Institution
         from apps.payments.models import Transaction
         from apps.tutors.models import TutorProfile
         from apps.admin_panel.models import ModerationItem
@@ -62,6 +63,7 @@ class AdminStatsView(APIView):
             'revenue':            f"{float(qs_t.aggregate(s=Sum('amount'))['s'] or 0):.2f}",
             'pending_tutor_approvals':   TutorProfile.objects.filter(approval_status='pending').count(),
             'pending_student_approvals': User.objects.filter(role='student', student_profile__is_approved=False).count(),
+            'pending_institution_approvals': Institution.objects.filter(approval_status='pending').count(),
             'open_disputes':      Dispute.objects.filter(status='open').count(),
             'pending_moderation': ModerationItem.objects.filter(status='pending').count(),
             'daily_revenue':      daily,
@@ -503,7 +505,7 @@ def bbb_rooms(request):
 @permission_classes([IsAdmin])
 def bbb_recordings(request):
     from apps.scheduling.bbb_service import bbb
-    response = bbb.get_recordings(states='published,unpublished') if bbb.configured else {'recordings': {}}
+    response = bbb.get_recordings(meeting_id='') if bbb.configured else {'recordings': {}}
     recordings = response.get('recordings', {}).get('recording', [])
     if isinstance(recordings, dict):
         recordings = [recordings]
@@ -549,6 +551,48 @@ def bbb_delete_recording(request):
         return Response({'error': 'record_id is required.'}, status=400)
     response = bbb.delete_recording(record_id)
     return Response(response, status=200 if response.get('returncode') == 'SUCCESS' else 502)
+
+
+class InstitutionApprovalListView(APIView):
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        from apps.institutions.models import Institution
+        from apps.institutions.serializers import InstitutionSerializer
+        queryset = Institution.objects.select_related('owner').order_by('-created_at')
+        approval = request.query_params.get('approval_status')
+        if approval in {'pending', 'approved', 'rejected'}:
+            queryset = queryset.filter(approval_status=approval)
+        search = request.query_params.get('search', '').strip()
+        if search:
+            queryset = queryset.filter(Q(name__icontains=search) | Q(owner__email__icontains=search))
+        try:
+            page = max(1, int(request.query_params.get('page', 1)))
+            page_size = min(100, max(1, int(request.query_params.get('page_size', 20))))
+        except (TypeError, ValueError):
+            return Response({'error': 'page and page_size must be integers.'}, status=400)
+        total = queryset.count()
+        items = queryset[(page - 1) * page_size:page * page_size]
+        return Response({'count': total, 'results': InstitutionSerializer(items, many=True).data})
+
+
+@api_view(['POST'])
+@permission_classes([IsAdmin])
+def approve_institution(request, institution_id):
+    from apps.institutions.models import Institution
+    institution = Institution.objects.filter(pk=institution_id).first()
+    if not institution:
+        return Response({'error': 'Institution not found.'}, status=404)
+    new_status = request.data.get('status', 'approved')
+    if new_status not in {'approved', 'rejected', 'pending'}:
+        return Response({'error': 'Invalid approval status.'}, status=400)
+    institution.approval_status = new_status
+    institution.is_verified = new_status == 'approved'
+    institution.rejection_reason = request.data.get('reason', '') if new_status == 'rejected' else ''
+    institution.reviewed_by = request.user
+    institution.reviewed_at = timezone.now()
+    institution.save(update_fields=['approval_status', 'is_verified', 'rejection_reason', 'reviewed_by', 'reviewed_at'])
+    return Response({'status': institution.approval_status, 'is_verified': institution.is_verified})
 
 
 # ── Export Endpoint ────────────────────────────────────────────────

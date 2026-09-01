@@ -625,778 +625,304 @@
 #     except Lesson.DoesNotExist:
 #         return Response({'error': 'Not found.'}, status=404)
 
-from datetime import timedelta
+import hashlib
+import logging
 
-from django.contrib.auth import get_user_model
-from django.db import transaction
 from django.db.models import Q
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
 
-from rest_framework import permissions, status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import Lesson
-from .serializers import LessonSerializer
+from .serializers import (
+    LessonListSerializer,
+    LessonSerializer,
+)
 from .bbb_service import bbb
 
 
-User = get_user_model()
+logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# BBB PASSWORD HELPERS
+# ============================================================================
+
+def _generate_bbb_password(kind: str, lesson_id) -> str:
+    """
+    Generate the same deterministic BBB password used for a lesson.
+
+    The BBBService creates passwords using:
+
+        gooprep-attendee-{lesson.id}
+        gooprep-moderator-{lesson.id}
+
+    Keep this logic synchronized with bbb_service.py.
+    """
+
+    if kind == "moderator":
+        prefix = "gooprep-moderator"
+    elif kind == "attendee":
+        prefix = "gooprep-attendee"
+    else:
+        raise ValueError(
+            "BBB password kind must be 'moderator' or 'attendee'."
+        )
+
+    return hashlib.sha256(
+        f"{prefix}-{lesson_id}".encode("utf-8")
+    ).hexdigest()[:12]
+
+
+def _get_user_name(user) -> str:
+    """
+    Safely determine the display name for a user.
+    """
+
+    full_name = ""
+
+    try:
+        full_name = user.get_full_name()
+    except Exception:
+        pass
+
+    if full_name:
+        return full_name
+
+    username = getattr(user, "username", "")
+
+    if username:
+        return username
+
+    email = getattr(user, "email", "")
+
+    if email:
+        return email
+
+    return str(user)
+
+
+def _get_avatar_url(user):
+    """
+    Safely obtain a user's avatar URL if the user model provides it.
+    """
+
+    if not hasattr(user, "get_avatar_url"):
+        return None
+
+    try:
+        return user.get_avatar_url()
+    except Exception:
+        return None
+
+
+def _user_has_lesson_access(user, lesson) -> bool:
+    """
+    Return True when the authenticated user is either
+    the tutor or student assigned to the lesson.
+    """
+
+    return (
+        user.id == lesson.tutor_id
+        or user.id == lesson.student_id
+    )
 
 
 # ============================================================================
 # LESSON LIST / CREATE
 # ============================================================================
 
-class LessonListView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+class LessonListCreateView(APIView):
+    """
+    GET:
+        Return lessons belonging to the authenticated user.
 
-    # ------------------------------------------------------------------------
-    # GET LESSONS
-    # ------------------------------------------------------------------------
+    POST:
+        Create a new lesson.
+    """
+
+    permission_classes = [
+        IsAuthenticated,
+    ]
 
     def get(self, request):
         user = request.user
 
-        # --------------------------------------------------------------------
-        # Base queryset based on role
-        # --------------------------------------------------------------------
-
-        if user.role == "tutor":
-            qs = Lesson.objects.filter(tutor=user)
-
-        elif user.role in ("admin", "staff"):
-            qs = Lesson.objects.all()
-
-        else:
-            qs = Lesson.objects.filter(student=user)
-
-        # --------------------------------------------------------------------
-        # Filters
-        # --------------------------------------------------------------------
-
-        status_filter = request.query_params.get("status")
-        month = request.query_params.get("month")
-        student_id = request.query_params.get("student")
-
-        if status_filter:
-            qs = qs.filter(status=status_filter)
-
-        if month:
-            try:
-                year, month_number = month.split("-")
-
-                qs = qs.filter(
-                    start_time__year=int(year),
-                    start_time__month=int(month_number),
-                )
-
-            except (ValueError, TypeError):
-                pass
-
-        if student_id and user.role == "tutor":
-            qs = qs.filter(student_id=student_id)
-
-        # --------------------------------------------------------------------
-        # Ordering
-        # --------------------------------------------------------------------
-
-        ordering = request.query_params.get(
-            "ordering",
-            "-start_time",
-        )
-
-        allowed_ordering = {
-            "start_time",
-            "-start_time",
-            "created_at",
-            "-created_at",
-            "status",
-            "-status",
-        }
-
-        if ordering not in allowed_ordering:
-            ordering = "-start_time"
-
-        qs = (
-            qs
+        queryset = (
+            Lesson.objects
             .select_related(
                 "tutor",
                 "student",
                 "subject",
             )
-            .order_by(ordering)
+            .filter(
+                Q(tutor=user)
+                | Q(student=user)
+            )
         )
 
-        # --------------------------------------------------------------------
-        # Pagination
-        # --------------------------------------------------------------------
+        # --------------------------------------------------------------
+        # Optional role filter
+        # --------------------------------------------------------------
 
-        try:
-            page_size = int(
-                request.query_params.get(
-                    "page_size",
-                    15,
-                )
-            )
-        except (ValueError, TypeError):
-            page_size = 15
+        role = request.query_params.get("role")
 
-        try:
-            page = int(
-                request.query_params.get(
-                    "page",
-                    1,
-                )
-            )
-        except (ValueError, TypeError):
-            page = 1
-
-        page_size = max(1, min(page_size, 100))
-        page = max(1, page)
-
-        total = qs.count()
-
-        start_index = (page - 1) * page_size
-        end_index = start_index + page_size
-
-        lessons = qs[start_index:end_index]
-
-        # --------------------------------------------------------------------
-        # Serialize
-        # --------------------------------------------------------------------
-
-        data = LessonSerializer(
-            lessons,
-            many=True,
-        ).data
-
-        # --------------------------------------------------------------------
-        # Determine whether user can join
-        # --------------------------------------------------------------------
-
-        now = timezone.now()
-
-        for index, lesson in enumerate(lessons):
-
-            if not lesson.start_time:
-                data[index]["can_join"] = False
-                continue
-
-            join_window = (
-                lesson.start_time
-                - timedelta(minutes=10)
+        if role == "tutor":
+            queryset = queryset.filter(
+                tutor=user
             )
 
-            data[index]["can_join"] = (
-                now >= join_window
-                and lesson.status in (
-                    "confirmed",
-                    "in_progress",
-                )
-                and lesson.payment_status == "paid"
+        elif role == "student":
+            queryset = queryset.filter(
+                student=user
             )
 
-        return Response({
-            "count": total,
-            "results": data,
-        })
-
-    # ------------------------------------------------------------------------
-    # CREATE LESSON
-    # ------------------------------------------------------------------------
-
-    def post(self, request):
-
-        try:
-            # ================================================================
-            # GET TUTOR
-            # ================================================================
-
-            tutor_id = request.data.get("tutor")
-
-            if not tutor_id:
-                return Response(
-                    {
-                        "error": "Tutor is required.",
-                        "field": "tutor",
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            tutor = (
-                User.objects
-                .filter(
-                    id=tutor_id,
-                    role="tutor",
-                )
-                .first()
-            )
-
-            if not tutor:
-                return Response(
-                    {
-                        "error": "Tutor account was not found.",
-                        "field": "tutor",
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            # ================================================================
-            # DETERMINE STUDENT
-            # ================================================================
-
-            student = request.user
-
-            booked_on_behalf = self._to_bool(
-                request.data.get(
-                    "booked_on_behalf",
-                    False,
-                )
-            )
-
-            if booked_on_behalf:
-
-                learner_email = (
-                    request.data.get(
-                        "learner_email",
-                        "",
-                    )
-                    .strip()
-                    .lower()
-                )
-
-                if not learner_email:
-                    return Response(
-                        {
-                            "error": (
-                                "Learner email is required "
-                                "when booking on behalf."
-                            ),
-                            "field": "learner_email",
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-                learner = (
-                    User.objects
-                    .filter(
-                        email__iexact=learner_email,
-                        role="student",
-                    )
-                    .first()
-                )
-
-                if not learner:
-                    return Response(
-                        {
-                            "error": (
-                                "Learner student account "
-                                "was not found."
-                            ),
-                            "field": "learner_email",
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-                student = learner
-
-            # ================================================================
-            # PARSE DATES
-            # ================================================================
-
-            start_time = request.data.get("start_time")
-            end_time = request.data.get("end_time")
-
-            if not start_time:
-                return Response(
-                    {
-                        "error": "Start time is required.",
-                        "field": "start_time",
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            if not end_time:
-                return Response(
-                    {
-                        "error": "End time is required.",
-                        "field": "end_time",
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            start = parse_datetime(start_time)
-            end = parse_datetime(end_time)
-
-            if start is None:
-                return Response(
-                    {
-                        "error": "Invalid start_time format.",
-                        "field": "start_time",
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            if end is None:
-                return Response(
-                    {
-                        "error": "Invalid end_time format.",
-                        "field": "end_time",
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            if timezone.is_naive(start):
-                start = timezone.make_aware(start)
-
-            if timezone.is_naive(end):
-                end = timezone.make_aware(end)
-
-            if end <= start:
-                return Response(
-                    {
-                        "error": (
-                            "End time must be later "
-                            "than start time."
-                        ),
-                        "field": "end_time",
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            duration = int(
-                (end - start).total_seconds() / 60
-            )
-
-            if duration <= 0:
-                return Response(
-                    {
-                        "error": (
-                            "Lesson duration must "
-                            "be greater than zero."
-                        )
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            # ================================================================
-            # TUTOR PROFILE / BOOKING RULES
-            # ================================================================
-
-            try:
-                tutor_profile = tutor.tutor_profile
-            except Exception:
-                return Response(
-                    {
-                        "error": (
-                            "This tutor does not have "
-                            "a tutor profile."
-                        )
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            now = timezone.now()
-
-            # Minimum notice
-            min_notice_hours = (
-                tutor_profile.min_notice_hours or 0
-            )
-
-            minimum_start = (
-                now
-                + timedelta(
-                    hours=min_notice_hours
-                )
-            )
-
-            if start < minimum_start:
-                return Response(
-                    {
-                        "error": (
-                            f"Please book at least "
-                            f"{min_notice_hours} hours in advance."
-                        ),
-                        "field": "start_time",
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            # Blocked dates
-            blocked_dates = {
-                str(item.get("date", item))[:10]
-                for item in (
-                    tutor_profile.blocked_dates or []
-                )
-            }
-
-            if start.date().isoformat() in blocked_dates:
-                return Response(
-                    {
-                        "error": (
-                            "The tutor is unavailable "
-                            "on that date."
-                        ),
-                        "field": "start_time",
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            # Availability
-            weekday_slots = [
-                slot
-                for slot in (
-                    tutor_profile.availability or []
-                )
-                if int(
-                    slot.get(
-                        "day_of_week",
-                        -1,
-                    )
-                ) == start.weekday()
-            ]
-
-            start_minutes = (
-                start.hour * 60
-                + start.minute
-            )
-
-            end_minutes = (
-                end.hour * 60
-                + end.minute
-            )
-
-            def time_to_minutes(value, default):
-                try:
-                    value = str(value or default)
-
-                    hours, minutes = (
-                        value[:5].split(":")
-                    )
-
-                    return (
-                        int(hours) * 60
-                        + int(minutes)
-                    )
-
-                except (
-                    ValueError,
-                    TypeError,
-                ):
-                    return default
-
-            valid_slot = any(
-                time_to_minutes(
-                    slot.get("start_time"),
-                    "00:00",
-                ) <= start_minutes
-                and
-                time_to_minutes(
-                    slot.get("end_time"),
-                    "23:59",
-                ) >= end_minutes
-                for slot in weekday_slots
-            )
-
-            if not valid_slot:
-                return Response(
-                    {
-                        "error": (
-                            "The selected time is "
-                            "outside the tutor availability."
-                        ),
-                        "field": "start_time",
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            # ================================================================
-            # DAILY BOOKING LIMIT
-            # ================================================================
-
-            day_lessons = (
-                Lesson.objects
-                .filter(
-                    tutor=tutor,
-                    start_time__date=start.date(),
-                )
-                .exclude(
-                    status="cancelled",
-                )
-            )
-
-            max_daily_bookings = (
-                tutor_profile.max_daily_bookings
-                or 0
-            )
-
-            if (
-                max_daily_bookings
-                and day_lessons.count()
-                >= max_daily_bookings
-            ):
-                return Response(
-                    {
-                        "error": (
-                            "The tutor has reached "
-                            "the booking limit for that day."
-                        ),
-                        "field": "start_time",
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            # ================================================================
-            # BOOKING BUFFER
-            # ================================================================
-
-            buffer_minutes = (
-                tutor_profile.booking_buffer_minutes
-                or 0
-            )
-
-            buffer_delta = timedelta(
-                minutes=buffer_minutes
-            )
-
-            if day_lessons.filter(
-                start_time__lt=end + buffer_delta,
-                end_time__gt=start - buffer_delta,
-            ).exists():
-
-                return Response(
-                    {
-                        "error": (
-                            "Please choose a time "
-                            "with enough buffer from "
-                            "another lesson."
-                        ),
-                        "field": "start_time",
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            # ================================================================
-            # SUBJECT
-            # ================================================================
-
-            subject_id = request.data.get(
-                "subject"
-            )
-
-            if subject_id in (
-                "",
-                None,
-                "null",
-            ):
-                subject_id = None
-
-            else:
-                try:
-                    subject_id = int(
-                        subject_id
-                    )
-                except (
-                    TypeError,
-                    ValueError,
-                ):
-                    return Response(
-                        {
-                            "error": "Invalid subject.",
-                            "field": "subject",
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-                if not tutor_profile.subjects.filter(
-                    pk=subject_id
-                ).exists():
-
-                    return Response(
-                        {
-                            "error": (
-                                "The selected subject "
-                                "is not offered by this tutor."
-                            ),
-                            "field": "subject",
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-            # ================================================================
-            # PRICE
-            # ================================================================
-
-            price = request.data.get(
-                "price",
-                0,
-            )
-
-            if price in (
-                "",
-                None,
-            ):
-                price = 0
-
-            # ================================================================
-            # CREATE LESSON
-            # ================================================================
-
-            with transaction.atomic():
-
-                lesson = Lesson.objects.create(
-                    tutor=tutor,
-                    student=student,
-
-                    subject_id=subject_id,
-
-                    lesson_type=request.data.get(
-                        "lesson_type",
-                        "regular",
-                    ),
-
-                    start_time=start,
-                    end_time=end,
-                    duration_minutes=duration,
-
-                    topic=request.data.get(
-                        "topic",
-                        "",
-                    ),
-
-                    price=price,
-
-                    currency=request.data.get(
-                        "currency",
-                        "GHS",
-                    ),
-
-                    record_session=self._to_bool(
-                        request.data.get(
-                            "record_session",
-                            True,
-                        )
-                    ),
-
-                    status="pending",
-                    payment_status="pending",
-
-                    booked_on_behalf=booked_on_behalf,
-
-                    booker_name=request.data.get(
-                        "booker_name",
-                        "",
-                    ),
-
-                    booker_relationship=request.data.get(
-                        "booker_relationship",
-                        "",
-                    ),
-
-                    booker_phone=request.data.get(
-                        "booker_phone",
-                        "",
-                    ),
-
-                    booker_email=request.data.get(
-                        "booker_email",
-                        request.user.email or "",
-                    ),
-
-                    notes=request.data.get(
-                        "notes",
-                        "",
-                    ),
-                )
-
-            # ================================================================
-            # NOTIFICATION
-            # ================================================================
-
-            try:
-                from apps.messaging.guppy import (
-                    notify_lesson_booked
-                )
-
-                notify_lesson_booked(
-                    lesson
-                )
-
-            except Exception as notification_error:
-                print(
-                    "Lesson notification failed:",
-                    notification_error,
-                )
-
-            # ================================================================
-            # RETURN LESSON
-            # ================================================================
-
-            lesson = (
-                Lesson.objects
-                .select_related(
-                    "tutor",
-                    "student",
-                    "subject",
-                )
-                .get(
-                    pk=lesson.pk
-                )
-            )
-
-            data = LessonSerializer(
-                lesson
-            ).data
-
-            data["can_join"] = False
-
-            return Response(
-                data,
-                status=status.HTTP_201_CREATED,
-            )
-
-        except Exception as exc:
-
-            import traceback
-
-            traceback.print_exc()
-
+        elif role not in (None, "", "all"):
             return Response(
                 {
-                    "error": str(exc),
-                    "type": exc.__class__.__name__,
+                    "detail": (
+                        "Invalid role. "
+                        "Use 'tutor', 'student', or 'all'."
+                    )
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-    # ------------------------------------------------------------------------
-    # BOOLEAN HELPER
-    # ------------------------------------------------------------------------
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
 
-    @staticmethod
-    def _to_bool(value):
+        month = request.query_params.get("month")
+        if month:
+            try:
+                year, month_number = month.split("-", 1)
+                queryset = queryset.filter(
+                    start_time__year=int(year),
+                    start_time__month=int(month_number),
+                )
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": "month must use YYYY-MM format."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-        if isinstance(value, bool):
-            return value
+        ordering = request.query_params.get("ordering", "-start_time")
+        if ordering not in {"start_time", "-start_time", "created_at", "-created_at", "status", "-status"}:
+            ordering = "-start_time"
+        queryset = queryset.order_by(ordering)
 
-        if value is None:
-            return False
-
-        if isinstance(value, str):
-            return value.strip().lower() in (
-                "true",
-                "1",
-                "yes",
-                "on",
+        try:
+            page = max(1, int(request.query_params.get("page", 1)))
+            page_size = min(100, max(1, int(request.query_params.get("page_size", 15))))
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "page and page_size must be integers."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if isinstance(value, int):
-            return value == 1
+        total = queryset.count()
+        start = (page - 1) * page_size
+        lessons = queryset[start:start + page_size]
+        serializer = LessonListSerializer(lessons, many=True)
 
-        return bool(value)
+        return Response(
+            {"count": total, "results": serializer.data},
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request):
+        """
+        Create a lesson.
+
+        The serializer is responsible for validating the incoming
+        lesson data.
+
+        We do not blindly trust client-supplied student/tutor values.
+        """
+
+        serializer = LessonSerializer(
+            data=request.data
+        )
+
+        serializer.is_valid(
+            raise_exception=True
+        )
+
+        validated = serializer.validated_data
+
+        tutor = validated.get("tutor")
+        student = validated.get("student")
+
+        # --------------------------------------------------------------
+        # Tutor is required
+        # --------------------------------------------------------------
+
+        if not tutor:
+            return Response(
+                {
+                    "detail": "A tutor is required."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # --------------------------------------------------------------
+        # Default student to authenticated user
+        # --------------------------------------------------------------
+
+        if not student:
+            student = request.user
+
+        # --------------------------------------------------------------
+        # Prevent arbitrary user impersonation
+        #
+        # If the booking is being created for another student,
+        # the serializer/application must explicitly permit it.
+        # --------------------------------------------------------------
+
+        booked_on_behalf = validated.get(
+            "booked_on_behalf",
+            False,
+        )
+
+        if (
+            student.id != request.user.id
+            and not booked_on_behalf
+            and not request.user.is_staff
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "You cannot create a lesson "
+                        "for another student."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # --------------------------------------------------------------
+        # Save
+        # --------------------------------------------------------------
+
+        lesson = serializer.save(
+            student=student
+        )
+
+        logger.info(
+            "Lesson %s created by user %s.",
+            lesson.id,
+            request.user.id,
+        )
+
+        return Response(
+            LessonSerializer(
+                lesson
+            ).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
 # ============================================================================
@@ -1404,775 +930,1031 @@ class LessonListView(APIView):
 # ============================================================================
 
 class LessonDetailView(APIView):
+    """
+    Retrieve a lesson belonging to the authenticated user.
+    """
+
     permission_classes = [
-        permissions.IsAuthenticated
+        IsAuthenticated,
     ]
 
+    def get_object(self, request, pk):
+        return get_object_or_404(
+            Lesson.objects.select_related(
+                "tutor",
+                "student",
+                "subject",
+            ).filter(
+                Q(tutor=request.user)
+                | Q(student=request.user)
+            ),
+            pk=pk,
+        )
+
     def get(self, request, pk):
+        lesson = self.get_object(
+            request,
+            pk,
+        )
 
-        try:
-            lesson = (
-                Lesson.objects
-                .select_related(
-                    "tutor",
-                    "student",
-                    "subject",
-                )
-                .get(
-                    pk=pk
-                )
-            )
+        return Response(
+            LessonSerializer(
+                lesson
+            ).data,
+            status=status.HTTP_200_OK,
+        )
 
-        except Lesson.DoesNotExist:
 
-            return Response(
-                {
-                    "error": "Not found."
-                },
-                status=status.HTTP_404_NOT_FOUND,
-            )
+# ============================================================================
+# BBB PROVISION
+# ============================================================================
 
-        # Permission
-        if (
-            request.user not in (
-                lesson.tutor,
-                lesson.student,
-            )
-            and request.user.role
-            not in (
-                "admin",
-                "staff",
-            )
+class ProvisionBBBView(APIView):
+    """
+    Provision a BigBlueButton classroom for a lesson.
+
+    POST:
+        /api/scheduling/lessons/<id>/bbb/provision/
+    """
+
+    permission_classes = [
+        IsAuthenticated,
+    ]
+
+    def post(self, request, pk):
+
+        lesson = get_object_or_404(
+            Lesson.objects.select_related(
+                "tutor",
+                "student",
+                "subject",
+            ),
+            pk=pk,
+        )
+
+        # --------------------------------------------------------------
+        # Access control
+        # --------------------------------------------------------------
+
+        if not _user_has_lesson_access(
+            request.user,
+            lesson,
         ):
             return Response(
                 {
-                    "error": "Forbidden."
+                    "detail": (
+                        "You do not have access to this lesson."
+                    )
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        data = LessonSerializer(
-            lesson
-        ).data
+        # --------------------------------------------------------------
+        # Only tutor can provision
+        # --------------------------------------------------------------
 
-        now = timezone.now()
-
-        data["can_join"] = (
-            lesson.start_time
-            and now >= (
-                lesson.start_time
-                - timedelta(minutes=10)
-            )
-            and lesson.status in (
-                "confirmed",
-                "in_progress",
-            )
-            and lesson.payment_status == "paid"
-        )
-
-        return Response(data)
-
-
-# ============================================================================
-# JOIN LESSON
-# ============================================================================
-#
-# IMPORTANT:
-# This function no longer calculates BBB SHA-1 checksums itself.
-# All BBB operations are delegated to BBBService.
-# ============================================================================
-
-@api_view(["POST"])
-@permission_classes([
-    permissions.IsAuthenticated
-])
-def join_lesson(request, pk):
-
-    try:
-        lesson = (
-            Lesson.objects
-            .select_related(
-                "tutor",
-                "student",
-                "subject",
-            )
-            .get(
-                pk=pk
-            )
-        )
-
-    except Lesson.DoesNotExist:
-
-        return Response(
-            {
-                "error": "Not found."
-            },
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    # ------------------------------------------------------------------------
-    # Permission
-    # ------------------------------------------------------------------------
-
-    if (
-        request.user not in (
-            lesson.tutor,
-            lesson.student,
-        )
-        and request.user.role
-        not in (
-            "admin",
-            "staff",
-        )
-    ):
-        return Response(
-            {
-                "error": "You are not allowed to join this lesson."
-            },
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    # ------------------------------------------------------------------------
-    # Payment
-    # ------------------------------------------------------------------------
-
-    if lesson.payment_status != "paid":
-
-        return Response(
-            {
-                "error": (
-                    "Payment is required before "
-                    "joining this lesson."
-                )
-            },
-            status=status.HTTP_402_PAYMENT_REQUIRED,
-        )
-
-    # ------------------------------------------------------------------------
-    # Lesson status
-    # ------------------------------------------------------------------------
-
-    if lesson.status not in (
-        "confirmed",
-        "in_progress",
-    ):
-        return Response(
-            {
-                "error": (
-                    "This lesson is not ready to join."
-                )
-            },
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    # ------------------------------------------------------------------------
-    # Check BBB configuration
-    # ------------------------------------------------------------------------
-
-    if not bbb.configured:
-
-        return Response(
-            {
-                "join_url": None,
-                "error": (
-                    "Virtual classroom is not configured. "
-                    "Please contact the administrator."
-                ),
-            },
-            status=status.HTTP_503_SERVICE_UNAVAILABLE,
-        )
-
-    # ------------------------------------------------------------------------
-    # Check join window
-    # ------------------------------------------------------------------------
-
-    now = timezone.now()
-
-    if lesson.start_time:
-
-        join_window = (
-            lesson.start_time
-            - timedelta(minutes=10)
-        )
-
-        if now < join_window:
-
+        if request.user.id != lesson.tutor_id:
             return Response(
                 {
-                    "error": (
-                        "The virtual classroom is not "
-                        "open yet. You can join 10 minutes "
-                        "before the lesson starts."
-                    ),
-                    "can_join": False,
-                    "join_at": join_window.isoformat(),
+                    "detail": (
+                        "Only the tutor can provision "
+                        "the virtual classroom."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # --------------------------------------------------------------
+        # Do not provision completed/cancelled lessons
+        # --------------------------------------------------------------
+
+        if lesson.status in {
+            "completed",
+            "cancelled",
+            "no_show",
+        }:
+            return Response(
+                {
+                    "detail": (
+                        "A virtual classroom cannot be "
+                        "created for this lesson."
+                    )
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-    # ------------------------------------------------------------------------
-    # Create BBB room if necessary
-    # ------------------------------------------------------------------------
+        # --------------------------------------------------------------
+        # If already provisioned, return the existing information
+        # --------------------------------------------------------------
 
-    try:
+        if lesson.bbb_meeting_id:
+            return Response(
+                {
+                    "detail": (
+                        "The virtual classroom has already "
+                        "been provisioned."
+                    ),
+                    "meeting_id": lesson.bbb_meeting_id,
+                    "join_url": lesson.bbb_join_url,
+                },
+                status=status.HTTP_200_OK,
+            )
 
-        if not lesson.bbb_meeting_id:
+        # --------------------------------------------------------------
+        # Provision BBB
+        # --------------------------------------------------------------
 
-            room = bbb.provision_lesson_room(
+        try:
+            result = bbb.provision_lesson_room(
                 lesson
             )
 
-            meeting_id = room.get(
+            meeting_id = result.get(
                 "meeting_id"
             )
 
             if not meeting_id:
+                logger.error(
+                    "BBB provisioning returned no meeting ID "
+                    "for lesson %s: %s",
+                    lesson.id,
+                    result,
+                )
 
                 return Response(
                     {
-                        "error": (
-                            "BigBlueButton did not "
-                            "return a meeting ID."
+                        "detail": (
+                            "BBB did not return a valid "
+                            "meeting ID."
                         ),
-                        "bbb_response": room,
+                        "bbb_response": result,
                     },
                     status=status.HTTP_502_BAD_GATEWAY,
                 )
 
-            lesson.bbb_meeting_id = meeting_id
-
-            # If your Lesson model has these fields,
-            # save them as well.
+            # ----------------------------------------------------------
+            # Store BBB meeting information.
             #
-            # Do NOT store BBB passwords unless your
-            # model actually requires them.
-            lesson.save(
-                update_fields=[
-                    "bbb_meeting_id"
-                ]
-            )
+            # The current Lesson model only has ONE bbb_join_url.
+            # We store the tutor URL here because the tutor is the
+            # owner/creator of the virtual classroom.
+            #
+            # Fresh student/tutor URLs are generated by JoinBBBView.
+            # ----------------------------------------------------------
 
-        else:
+            lesson.bbb_meeting_id = meeting_id
+            lesson.bbb_status = "created"
+            lesson.bbb_created_at = timezone.now()
 
-            meeting_id = lesson.bbb_meeting_id
-
-        # --------------------------------------------------------------------
-        # Generate participant join URL through BBBService
-        # --------------------------------------------------------------------
-
-        is_moderator = (
-            request.user == lesson.tutor
-        )
-
-        full_name = (
-            request.user.get_full_name()
-            or request.user.email
-            or "Gooprep User"
-        )
-
-        user_id = str(
-            request.user.id
-        )
-
-        # --------------------------------------------------------------------
-        # If the existing meeting was created by
-        # provision_lesson_room(), recreate the appropriate
-        # password using the service's provisioning logic.
-        #
-        # If the service exposes a dedicated join_lesson()
-        # helper, use that instead.
-        # --------------------------------------------------------------------
-
-        attendee_pw = (
-            __import__("hashlib")
-            .md5(
-                f"att-{lesson.id}".encode()
-            )
-            .hexdigest()[:12]
-        )
-
-        moderator_pw = (
-            __import__("hashlib")
-            .md5(
-                f"mod-{lesson.id}".encode()
-            )
-            .hexdigest()[:12]
-        )
-
-        password = (
-            moderator_pw
-            if is_moderator
-            else attendee_pw
-        )
-
-        join_url = bbb.join_url(
-            meeting_id=meeting_id,
-            full_name=full_name,
-            password=password,
-            user_id=user_id,
-            role=(
-                "MODERATOR"
-                if is_moderator
-                else "VIEWER"
-            ),
-            avatar_url=(
-                request.user.get_avatar_url()
-                if hasattr(
-                    request.user,
-                    "get_avatar_url",
+            lesson.bbb_join_url = (
+                result.get(
+                    "join_url_tutor",
+                    "",
                 )
-                else None
-            ),
-        )
-
-        # --------------------------------------------------------------------
-        # Mark lesson as in progress
-        # --------------------------------------------------------------------
-
-        if lesson.status == "confirmed":
-
-            lesson.status = "in_progress"
+                or ""
+            )
 
             lesson.save(
                 update_fields=[
-                    "status"
+                    "bbb_meeting_id",
+                    "bbb_join_url",
+                    "bbb_status",
+                    "bbb_created_at",
+                    "updated_at",
                 ]
             )
 
-        return Response(
-            {
-                "join_url": join_url,
-                "meeting_id": meeting_id,
-                "role": (
-                    "moderator"
-                    if is_moderator
-                    else "attendee"
-                ),
-                "can_join": True,
-            }
-        )
-
-    except Exception as exc:
-
-        import traceback
-
-        traceback.print_exc()
-
-        return Response(
-            {
-                "error": (
-                    "Unable to connect to "
-                    "the virtual classroom."
-                ),
-                "detail": str(exc),
-                "type": exc.__class__.__name__,
-            },
-            status=status.HTTP_502_BAD_GATEWAY,
-        )
-
-
-# ============================================================================
-# END LESSON
-# ============================================================================
-
-@api_view(["POST"])
-@permission_classes([
-    permissions.IsAuthenticated
-])
-def end_lesson(request, pk):
-
-    try:
-
-        lesson = Lesson.objects.get(
-            pk=pk
-        )
-
-    except Lesson.DoesNotExist:
-
-        return Response(
-            {
-                "error": "Not found."
-            },
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    # ------------------------------------------------------------------------
-    # Permission
-    # ------------------------------------------------------------------------
-
-    if (
-        request.user != lesson.tutor
-        and request.user.role
-        not in (
-            "admin",
-            "staff",
-        )
-    ):
-        return Response(
-            {
-                "error": (
-                    "Only the tutor or administrator "
-                    "can end the lesson."
-                )
-            },
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    # ------------------------------------------------------------------------
-    # End BBB meeting
-    # ------------------------------------------------------------------------
-
-    if lesson.bbb_meeting_id and bbb.configured:
-
-        try:
-
-            # Use the moderator password expected by
-            # provision_lesson_room().
-            import hashlib
-
-            moderator_pw = (
-                hashlib.md5(
-                    f"mod-{lesson.id}".encode()
-                )
-                .hexdigest()[:12]
+            logger.info(
+                "BBB meeting %s provisioned for lesson %s.",
+                meeting_id,
+                lesson.id,
             )
 
-            bbb.end_meeting(
-                lesson.bbb_meeting_id,
-                moderator_pw,
+            return Response(
+                {
+                    **result,
+                    "lesson_id": lesson.id,
+                },
+                status=status.HTTP_201_CREATED,
             )
 
-        except Exception as exc:
-
-            # Do not prevent the lesson from being
-            # marked completed if BBB has already ended.
-            print(
-                "BBB end meeting failed:",
+        except RuntimeError as exc:
+            logger.error(
+                "BBB provisioning error for lesson %s: %s",
+                lesson.id,
                 exc,
             )
 
-    # ------------------------------------------------------------------------
-    # Complete lesson
-    # ------------------------------------------------------------------------
+            return Response(
+                {
+                    "detail": str(exc)
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
-    lesson.status = "completed"
+        except Exception as exc:
+            logger.exception(
+                "Unexpected BBB provisioning failure "
+                "for lesson %s.",
+                lesson.id,
+            )
 
-    lesson.save(
-        update_fields=[
-            "status"
-        ]
-    )
-
-    # ------------------------------------------------------------------------
-    # Gamification
-    # ------------------------------------------------------------------------
-
-    try:
-
-        from apps.gamification.services import (
-            record_completed_lesson
-        )
-
-        record_completed_lesson(
-            lesson
-        )
-
-    except Exception as exc:
-
-        print(
-            "Gamification failed:",
-            exc,
-        )
-
-    # ------------------------------------------------------------------------
-    # AI summary
-    # ------------------------------------------------------------------------
-
-    try:
-
-        from apps.scheduling.tasks import (
-            generate_ai_summary
-        )
-
-        generate_ai_summary.delay(
-            lesson.id
-        )
-
-    except Exception as exc:
-
-        print(
-            "AI summary task failed:",
-            exc,
-        )
-
-    return Response(
-        {
-            "ended": True
-        }
-    )
+            return Response(
+                {
+                    "detail": (
+                        "Failed to provision the "
+                        "virtual classroom."
+                    ),
+                    "error": str(exc),
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 
 # ============================================================================
-# RESCHEDULE LESSON
+# BBB JOIN
 # ============================================================================
 
-@api_view(["POST"])
-@permission_classes([
-    permissions.IsAuthenticated
-])
-def reschedule_lesson(request, pk):
+class JoinBBBView(APIView):
+    """
+    Generate a fresh BigBlueButton join URL.
 
-    try:
+    POST:
+        /api/scheduling/lessons/<id>/bbb/join/
+    """
 
-        lesson = Lesson.objects.get(
-            pk=pk
+    permission_classes = [
+        IsAuthenticated,
+    ]
+
+    def post(self, request, pk):
+
+        lesson = get_object_or_404(
+            Lesson.objects.select_related(
+                "tutor",
+                "student",
+            ),
+            pk=pk,
         )
 
-    except Lesson.DoesNotExist:
+        # --------------------------------------------------------------
+        # Access control
+        # --------------------------------------------------------------
 
-        return Response(
-            {
-                "error": "Not found."
-            },
-            status=status.HTTP_404_NOT_FOUND,
+        if not _user_has_lesson_access(
+            request.user,
+            lesson,
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "You do not have access "
+                        "to this lesson."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # --------------------------------------------------------------
+        # BBB must exist
+        # --------------------------------------------------------------
+
+        if not lesson.bbb_meeting_id:
+            return Response(
+                {
+                    "detail": (
+                        "The virtual classroom has "
+                        "not been created yet."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # --------------------------------------------------------------
+        # Prevent joining invalid lessons
+        # --------------------------------------------------------------
+
+        if lesson.status in {
+            "cancelled",
+            "completed",
+            "no_show",
+        }:
+            return Response(
+                {
+                    "detail": (
+                        "This lesson cannot be joined."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # --------------------------------------------------------------
+        # Determine role
+        # --------------------------------------------------------------
+
+        is_tutor = (
+            request.user.id == lesson.tutor_id
         )
 
-    # ------------------------------------------------------------------------
-    # Permission
-    # ------------------------------------------------------------------------
-
-    if request.user not in (
-        lesson.tutor,
-        lesson.student,
-    ):
-
-        return Response(
-            {
-                "error": "Forbidden."
-            },
-            status=status.HTTP_403_FORBIDDEN,
+        role = (
+            "moderator"
+            if is_tutor
+            else "attendee"
         )
 
-    # ------------------------------------------------------------------------
-    # Parse new dates
-    # ------------------------------------------------------------------------
-
-    new_start = parse_datetime(
-        request.data.get(
-            "new_start_time"
+        password = _generate_bbb_password(
+            role,
+            lesson.id,
         )
-    )
 
-    new_end = parse_datetime(
-        request.data.get(
-            "new_end_time"
+        name = _get_user_name(
+            request.user
         )
-    )
 
-    if new_start is None:
+        avatar_url = _get_avatar_url(
+            request.user
+        )
 
-        return Response(
-            {
-                "error": (
-                    "Invalid new_start_time."
+        # --------------------------------------------------------------
+        # Generate join URL
+        # --------------------------------------------------------------
+
+        try:
+            join_url = bbb.join_url(
+                meeting_id=lesson.bbb_meeting_id,
+                full_name=name,
+                password=password,
+                user_id=str(
+                    request.user.id
+                ),
+                role=(
+                    "MODERATOR"
+                    if is_tutor
+                    else "VIEWER"
+                ),
+                avatar_url=avatar_url,
+            )
+
+            if not join_url:
+                return Response(
+                    {
+                        "detail": (
+                            "BBB did not return "
+                            "a join URL."
+                        )
+                    },
+                    status=status.HTTP_502_BAD_GATEWAY,
                 )
-            },
-            status=status.HTTP_400_BAD_REQUEST,
-        )
 
-    if new_end is None:
+            # ----------------------------------------------------------
+            # Check whether meeting is already running.
+            # ----------------------------------------------------------
 
-        return Response(
-            {
-                "error": (
-                    "Invalid new_end_time."
+            running = False
+
+            try:
+                running = bbb.is_meeting_running(
+                    lesson.bbb_meeting_id
                 )
-            },
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if timezone.is_naive(new_start):
-        new_start = timezone.make_aware(
-            new_start
-        )
-
-    if timezone.is_naive(new_end):
-        new_end = timezone.make_aware(
-            new_end
-        )
-
-    if new_end <= new_start:
-
-        return Response(
-            {
-                "error": (
-                    "End time must be later "
-                    "than start time."
+            except Exception:
+                logger.warning(
+                    "Unable to determine BBB running "
+                    "status for lesson %s.",
+                    lesson.id,
+                    exc_info=True,
                 )
-            },
-            status=status.HTTP_400_BAD_REQUEST,
+
+            # ----------------------------------------------------------
+            # Automatically move pending/confirmed lesson to
+            # in_progress when BBB is running.
+            #
+            # We do NOT use bbb_status because that field does not
+            # exist in the current Lesson model.
+            # ----------------------------------------------------------
+
+            if running and lesson.status in {
+                "pending",
+                "confirmed",
+            }:
+                lesson.status = "in_progress"
+
+                lesson.save(
+                    update_fields=[
+                        "status",
+                        "updated_at",
+                    ]
+                )
+
+            logger.info(
+                "User %s generated BBB join URL for lesson %s "
+                "(role=%s, running=%s).",
+                request.user.id,
+                lesson.id,
+                role,
+                running,
+            )
+
+            return Response(
+                {
+                    "join_url": join_url,
+                    "meeting_id": (
+                        lesson.bbb_meeting_id
+                    ),
+                    "role": role,
+                    "running": running,
+                    "lesson_status": lesson.status,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except RuntimeError as exc:
+            logger.error(
+                "BBB join configuration error "
+                "for lesson %s: %s",
+                lesson.id,
+                exc,
+            )
+
+            return Response(
+                {
+                    "detail": str(exc)
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        except Exception as exc:
+            logger.exception(
+                "BBB join failed for lesson %s.",
+                lesson.id,
+            )
+
+            return Response(
+                {
+                    "detail": (
+                        "Failed to generate the "
+                        "virtual classroom URL."
+                    ),
+                    "error": str(exc),
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+
+# ============================================================================
+# BBB STATUS
+# ============================================================================
+
+class BBBStatusView(APIView):
+    """
+    Check whether the BBB classroom for a lesson is running.
+
+    GET:
+        /api/scheduling/lessons/<id>/bbb/status/
+    """
+
+    permission_classes = [
+        IsAuthenticated,
+    ]
+
+    def get(self, request, pk):
+
+        lesson = get_object_or_404(
+            Lesson.objects.select_related(
+                "tutor",
+                "student",
+            ),
+            pk=pk,
         )
 
-    # ------------------------------------------------------------------------
-    # Update lesson
-    # ------------------------------------------------------------------------
+        # --------------------------------------------------------------
+        # Access control
+        # --------------------------------------------------------------
 
-    lesson.start_time = new_start
-    lesson.end_time = new_end
+        if not _user_has_lesson_access(
+            request.user,
+            lesson,
+        ):
+            return Response(
+                {
+                    "detail": "Access denied."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
-    lesson.duration_minutes = int(
-        (
-            new_end - new_start
-        ).total_seconds()
-        / 60
-    )
+        # --------------------------------------------------------------
+        # Meeting not created
+        # --------------------------------------------------------------
 
-    lesson.status = "rescheduled"
+        if not lesson.bbb_meeting_id:
+            return Response(
+                {
+                    "meeting_id": None,
+                    "running": False,
+                    "lesson_status": lesson.status,
+                    "bbb_status": "not_created",
+                },
+                status=status.HTTP_200_OK,
+            )
 
-    lesson.save()
+        # --------------------------------------------------------------
+        # Check BBB
+        # --------------------------------------------------------------
 
-    # ------------------------------------------------------------------------
-    # Existing BBB meeting should not be reused after
-    # a major schedule change.
-    #
-    # Clear it so a new room can be provisioned
-    # when the lesson becomes confirmed.
-    # ------------------------------------------------------------------------
+        try:
+            running = bbb.is_meeting_running(
+                lesson.bbb_meeting_id
+            )
 
-    if lesson.bbb_meeting_id:
+            # ----------------------------------------------------------
+            # Update lesson status if appropriate.
+            # ----------------------------------------------------------
 
-        lesson.bbb_meeting_id = None
+            if running:
+                if lesson.status in {
+                    "pending",
+                    "confirmed",
+                }:
+                    lesson.status = "in_progress"
 
-        lesson.save(
-            update_fields=[
-                "bbb_meeting_id"
-            ]
+                    lesson.save(
+                        update_fields=[
+                            "status",
+                            "updated_at",
+                        ]
+                    )
+
+                bbb_status = "running"
+
+            else:
+                if lesson.status == "in_progress":
+                    bbb_status = "ended"
+                else:
+                    bbb_status = "not_running"
+
+            return Response(
+                {
+                    "meeting_id": (
+                        lesson.bbb_meeting_id
+                    ),
+                    "running": running,
+                    "bbb_status": bbb_status,
+                    "lesson_status": lesson.status,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except RuntimeError as exc:
+            logger.error(
+                "BBB status configuration error "
+                "for lesson %s: %s",
+                lesson.id,
+                exc,
+            )
+
+            return Response(
+                {
+                    "detail": str(exc)
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        except Exception as exc:
+            logger.exception(
+                "BBB status check failed "
+                "for lesson %s.",
+                lesson.id,
+            )
+
+            return Response(
+                {
+                    "detail": (
+                        "Unable to determine "
+                        "BBB meeting status."
+                    ),
+                    "error": str(exc),
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+
+# ============================================================================
+# END BBB MEETING
+# ============================================================================
+
+class EndBBBView(APIView):
+    """
+    End an active BigBlueButton meeting.
+
+    POST:
+        /api/scheduling/lessons/<id>/bbb/end/
+
+    Only the tutor can end the classroom.
+    """
+
+    permission_classes = [
+        IsAuthenticated,
+    ]
+
+    def post(self, request, pk):
+
+        lesson = get_object_or_404(
+            Lesson.objects.select_related(
+                "tutor",
+                "student",
+            ),
+            pk=pk,
         )
 
-    return Response(
-        {
-            "rescheduled": True,
-            "start_time": new_start.isoformat(),
-            "end_time": new_end.isoformat(),
-        }
-    )
+        # --------------------------------------------------------------
+        # Only tutor can end meeting
+        # --------------------------------------------------------------
+
+        if request.user.id != lesson.tutor_id:
+            return Response(
+                {
+                    "detail": (
+                        "Only the tutor can end "
+                        "the virtual classroom."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # --------------------------------------------------------------
+        # Meeting must exist
+        # --------------------------------------------------------------
+
+        if not lesson.bbb_meeting_id:
+            return Response(
+                {
+                    "detail": (
+                        "No BBB meeting exists "
+                        "for this lesson."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # --------------------------------------------------------------
+        # Generate moderator password
+        # --------------------------------------------------------------
+
+        moderator_password = _generate_bbb_password(
+            "moderator",
+            lesson.id,
+        )
+
+        try:
+            response = bbb.end_meeting(
+                meeting_id=lesson.bbb_meeting_id,
+                moderator_pw=moderator_password,
+            )
+
+            if not bbb._success(response):
+                logger.error(
+                    "BBB failed to end meeting "
+                    "for lesson %s: %s",
+                    lesson.id,
+                    response,
+                )
+
+                return Response(
+                    {
+                        "detail": (
+                            response.get(
+                                "message",
+                                "BBB failed to end the meeting.",
+                            )
+                        ),
+                        "bbb_response": response,
+                    },
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+
+            # ----------------------------------------------------------
+            # Mark lesson as completed if it was in progress.
+            #
+            # We do not automatically mark every lesson completed,
+            # because a tutor may manually end a lesson early.
+            # ----------------------------------------------------------
+
+            if lesson.status == "in_progress":
+                lesson.status = "completed"
+
+                lesson.save(
+                    update_fields=[
+                        "status",
+                        "updated_at",
+                    ]
+                )
+
+            logger.info(
+                "BBB meeting ended for lesson %s.",
+                lesson.id,
+            )
+
+            return Response(
+                {
+                    "detail": (
+                        "Virtual classroom ended successfully."
+                    ),
+                    "meeting_id": (
+                        lesson.bbb_meeting_id
+                    ),
+                    "lesson_status": lesson.status,
+                    "bbb_response": response,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except RuntimeError as exc:
+            logger.error(
+                "BBB end meeting configuration error "
+                "for lesson %s: %s",
+                lesson.id,
+                exc,
+            )
+
+            return Response(
+                {
+                    "detail": str(exc)
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        except Exception as exc:
+            logger.exception(
+                "Failed to end BBB meeting "
+                "for lesson %s.",
+                lesson.id,
+            )
+
+            return Response(
+                {
+                    "detail": (
+                        "Failed to end the "
+                        "virtual classroom."
+                    ),
+                    "error": str(exc),
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
 
 # ============================================================================
 # LESSON RECORDINGS
 # ============================================================================
 
-@api_view(["GET"])
-@permission_classes([
-    permissions.IsAuthenticated
-])
-def lesson_recordings(request, pk):
+class LessonRecordingsView(APIView):
+    """
+    Retrieve BBB recordings belonging to a lesson.
 
-    try:
+    GET:
+        /api/scheduling/lessons/<id>/bbb/recordings/
+    """
 
-        lesson = Lesson.objects.get(
-            pk=pk
+    permission_classes = [
+        IsAuthenticated,
+    ]
+
+    def get(self, request, pk):
+
+        lesson = get_object_or_404(
+            Lesson.objects.select_related(
+                "tutor",
+                "student",
+            ),
+            pk=pk,
         )
 
-    except Lesson.DoesNotExist:
+        # --------------------------------------------------------------
+        # Access control
+        # --------------------------------------------------------------
 
-        return Response(
-            {
-                "error": "Not found."
-            },
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    # ------------------------------------------------------------------------
-    # Permission
-    # ------------------------------------------------------------------------
-
-    if (
-        request.user not in (
-            lesson.tutor,
-            lesson.student,
-        )
-        and request.user.role
-        not in (
-            "admin",
-            "staff",
-        )
-    ):
-
-        return Response(
-            {
-                "error": "Forbidden."
-            },
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    # ------------------------------------------------------------------------
-    # BBB configuration
-    # ------------------------------------------------------------------------
-
-    if not bbb.configured:
-
-        return Response(
-            {
-                "recordings": [],
-                "error": (
-                    "Virtual classroom is not configured."
-                ),
-            },
-            status=status.HTTP_503_SERVICE_UNAVAILABLE,
-        )
-
-    # ------------------------------------------------------------------------
-    # Get BBB recordings
-    # ------------------------------------------------------------------------
-
-    try:
-
-        recordings = bbb.get_lesson_recordings(
-            lesson
-        )
-
-        # --------------------------------------------------------------------
-        # Backwards compatibility with an old recording_url
-        # --------------------------------------------------------------------
-
-        if not recordings and lesson.recording_url:
-
-            recordings = [
+        if not _user_has_lesson_access(
+            request.user,
+            lesson,
+        ):
+            return Response(
                 {
-                    "record_id": "",
-                    "name": (
-                        f"Lesson {lesson.id} Recording"
+                    "detail": "Access denied."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # --------------------------------------------------------------
+        # Meeting does not exist
+        # --------------------------------------------------------------
+
+        if not lesson.bbb_meeting_id:
+            return Response(
+                {
+                    "recordings": [],
+                    "recording_available": False,
+                    "recording_url": "",
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # --------------------------------------------------------------
+        # Retrieve recordings
+        # --------------------------------------------------------------
+
+        try:
+            recordings = bbb.get_lesson_recordings(
+                lesson
+            )
+
+            # ----------------------------------------------------------
+            # Update Lesson recording fields.
+            #
+            # The model contains:
+            #
+            # recording_available
+            # recording_url
+            #
+            # We use the first usable playback URL.
+            # ----------------------------------------------------------
+
+            recording_available = bool(
+                recordings
+            )
+
+            recording_url = ""
+
+            for recording in recordings:
+                url = recording.get(
+                    "playback_url",
+                    "",
+                )
+
+                if url:
+                    recording_url = url
+                    break
+
+                # Fallback to the first available format.
+                for fmt in recording.get(
+                    "formats",
+                    [],
+                ):
+                    fmt_url = fmt.get(
+                        "url",
+                        "",
+                    )
+
+                    if fmt_url:
+                        recording_url = fmt_url
+                        break
+
+                if recording_url:
+                    break
+
+            update_fields = []
+
+            if lesson.recording_available != recording_available:
+                lesson.recording_available = (
+                    recording_available
+                )
+                update_fields.append(
+                    "recording_available"
+                )
+
+            if lesson.recording_url != recording_url:
+                lesson.recording_url = recording_url
+                update_fields.append(
+                    "recording_url"
+                )
+
+            if update_fields:
+                update_fields.append(
+                    "updated_at"
+                )
+
+                lesson.save(
+                    update_fields=update_fields
+                )
+
+            return Response(
+                {
+                    "recordings": recordings,
+                    "recording_available": (
+                        lesson.recording_available
                     ),
-                    "state": "published",
-                    "start_time": "",
-                    "end_time": "",
-                    "duration": lesson.duration_minutes,
-                    "playback_url": lesson.recording_url,
-                    "thumbnail": "",
-                    "formats": [],
-                }
-            ]
+                    "recording_url": (
+                        lesson.recording_url
+                    ),
+                },
+                status=status.HTTP_200_OK,
+            )
 
-        return Response(
-            {
-                "recordings": recordings
-            }
-        )
+        except RuntimeError as exc:
+            logger.error(
+                "BBB recordings configuration error "
+                "for lesson %s: %s",
+                lesson.id,
+                exc,
+            )
 
-    except Exception as exc:
+            return Response(
+                {
+                    "detail": str(exc)
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
-        import traceback
+        except Exception as exc:
+            logger.exception(
+                "Failed retrieving recordings "
+                "for lesson %s.",
+                lesson.id,
+            )
 
-        traceback.print_exc()
+            return Response(
+                {
+                    "detail": (
+                        "Failed to retrieve "
+                        "lesson recordings."
+                    ),
+                    "error": str(exc),
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
-        return Response(
-            {
-                "recordings": [],
-                "error": (
-                    "Unable to retrieve lesson recordings."
+
+# ============================================================================
+# BBB HEALTH
+# ============================================================================
+
+class BBBHealthView(APIView):
+    """
+    Check BigBlueButton connectivity.
+
+    GET:
+        /api/scheduling/bbb/health/
+
+    Staff only.
+    """
+
+    permission_classes = [
+        IsAuthenticated,
+    ]
+
+    def get(self, request):
+
+        if not request.user.is_staff:
+            return Response(
+                {
+                    "detail": "Staff access required."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        configured = bbb.configured
+
+        if not configured:
+            return Response(
+                {
+                    "configured": False,
+                    "healthy": False,
+                    "bbb_url": "",
+                    "detail": (
+                        "BigBlueButton is not configured."
+                    ),
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        try:
+            healthy = bbb.server_healthy()
+
+            return Response(
+                {
+                    "configured": True,
+                    "healthy": healthy,
+                    "bbb_url": bbb.base_url,
+                },
+                status=(
+                    status.HTTP_200_OK
+                    if healthy
+                    else status.HTTP_503_SERVICE_UNAVAILABLE
                 ),
-                "detail": str(exc),
-            },
-            status=status.HTTP_502_BAD_GATEWAY,
-        )
+            )
+
+        except Exception as exc:
+            logger.exception(
+                "BBB health check failed."
+            )
+
+            return Response(
+                {
+                    "configured": configured,
+                    "healthy": False,
+                    "bbb_url": (
+                        bbb.base_url
+                        if configured
+                        else ""
+                    ),
+                    "detail": str(exc),
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )

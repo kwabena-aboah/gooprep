@@ -56,6 +56,10 @@ function restoreDraft(profile) {
     form.value.school ||= profile.school || ''
     form.value.learning_goals ||= profile.learning_goals || ''
     form.value.identity_document_type ||= profile.identity_document_type || ''
+    form.value.date_of_birth ||= profile.date_of_birth || ''
+    form.value.gender ||= profile.gender || ''
+    form.value.city ||= profile.city || ''
+    form.value.address ||= profile.address || ''
     if (!subjectsText.value && Array.isArray(profile.subjects_interest)) subjectsText.value = profile.subjects_interest.join(', ')
   }
 }
@@ -68,6 +72,10 @@ async function save() {
   saving.value = true
   try {
     const fd = new FormData()
+    fd.append('date_of_birth', form.value.date_of_birth)
+    fd.append('gender', form.value.gender)
+    fd.append('city', form.value.city)
+    fd.append('address', form.value.address)
     fd.append('education_level', form.value.education_level)
     fd.append('school', form.value.school)
     fd.append('learning_goals', form.value.learning_goals)

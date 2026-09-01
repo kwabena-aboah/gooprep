@@ -24,9 +24,10 @@
           <div class="col-6"><label class="form-label small fw-600">Last Name *</label><input class="form-control" v-model="form.last_name" placeholder="Mensah"/></div>
         </div>
         <div class="mb-3"><label class="form-label small fw-600">Email *</label><input type="email" class="form-control" v-model="form.email" placeholder="you@example.com"/></div>
-        <div class="mb-3"><label class="form-label small fw-600">Phone <span class="text-muted fw-400">(optional)</span></label>
-          <div class="input-group"><span class="input-group-text text-muted small">+233</span><input class="form-control" v-model="form.phone" placeholder="24 000 0000"/></div>
+        <div class="mb-3"><label class="form-label small fw-600">Phone *</label>
+          <div class="input-group"><span class="input-group-text text-muted small">+233</span><input required type="tel" class="form-control" v-model="form.phone" placeholder="24 000 0000"/></div>
         </div>
+        <div v-if="form.role==='institution'" class="mb-3"><label class="form-label small fw-600">Institution name *</label><input required class="form-control" v-model="form.institution_name" placeholder="School or organisation name"/></div>
         <div class="row g-3 mb-3">
           <div class="col-6"><label class="form-label small fw-600">Password *</label>
             <div class="input-group"><input :type="showPw?'text':'password'" class="form-control" v-model="form.password" placeholder="Min 8 chars"/><button class="btn btn-outline-secondary" @click="showPw=!showPw"><i class="bi" :class="showPw?'bi-eye-slash':'bi-eye'"></i></button></div>
@@ -59,12 +60,17 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 const auth=useAuthStore(); const router=useRouter()
 const showPw=ref(false); const agreed=ref(false)
-const form=ref({first_name:'',last_name:'',email:'',phone:'',password:'',password2:'',role:'student'})
+const form=ref({first_name:'',last_name:'',email:'',phone:'',institution_name:'',password:'',password2:'',role:'student'})
 const roles=[{value:'student',label:'Learn',sub:'Find tutors',icon:'bi bi-mortarboard'},{value:'tutor',label:'Teach',sub:'Earn income',icon:'bi bi-person-video3'},{value:'institution',label:'Manage',sub:'Bulk enrol',icon:'bi bi-building'}]
 const strength=computed(()=>{const p=form.value.password;if(!p)return 0;let s=0;if(p.length>=8)s++;if(/[A-Z]/.test(p))s++;if(/[0-9]/.test(p))s++;if(/[^A-Za-z0-9]/.test(p))s++;return Math.max(1,s)})
 const colors=['#ef4444','#f59e0b','#3b82f6','#10b981']
 const labels=['Very weak','Weak','Good','Strong']
 const strengthColor=computed(()=>colors[strength.value-1])
 const strengthLabel=computed(()=>labels[strength.value-1])
-async function submit(){const selectedRole=form.value.role;const{ok}=await auth.register(form.value);if(ok)router.push(selectedRole==='tutor'?'/tutor-onboarding':selectedRole==='student'?'/student-onboarding':'/dashboard')}
+async function submit(){
+  if(!form.value.phone.trim() || (form.value.role==='institution'&&!form.value.institution_name.trim())) return
+  const selectedRole=form.value.role
+  const{ok}=await auth.register(form.value)
+  if(ok) router.push(selectedRole==='tutor'?'/tutor-onboarding':selectedRole==='student'?'/student-onboarding':'/institution-onboarding')
+}
 </script>

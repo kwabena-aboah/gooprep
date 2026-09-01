@@ -2,7 +2,7 @@ from django.urls import path
 from .views import (
     TransactionListView, PayoutListView, DisputeListView,
     paystack_webhook, initiate_payment, verify_payment,
-    SubscriptionView, SubscriptionStatusView, process_payout,
+    process_payout,
 )
 urlpatterns = [
     path('transactions/',        TransactionListView.as_view(), name='transactions'),
@@ -11,7 +11,7 @@ urlpatterns = [
     path('paystack/webhook/',    paystack_webhook,              name='paystack_webhook'),
     path('initiate/',              initiate_payment,                name='initiate_payment'),
     path('verify/',                verify_payment,                  name='verify_payment'),
-    path('subscriptions/',         SubscriptionView.as_view(),      name='subscriptions'),
-    path('subscriptions/status/',  SubscriptionStatusView.as_view(), name='subscription_status'),
+    # Subscription plans have been retired. Historical subscription records remain for audit purposes.
+
     path('payouts/<int:pk>/process/', process_payout,               name='process_payout'),
 ]

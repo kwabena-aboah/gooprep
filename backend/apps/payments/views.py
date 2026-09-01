@@ -142,7 +142,7 @@ def initiate_payment(request):
         data = paystack.initialize(
             request.user.email, lesson.price, reference,
             f'{settings.FRONTEND_URL}/payments/verify',
-            {'type': 'lesson', 'lesson_id': lesson.id},
+            {'type': 'lesson', 'lesson_id': lesson.id, 'booked_on_behalf': lesson.booked_on_behalf},
         )
     except Exception as exc:
         txn.status = 'failed'
@@ -217,6 +217,17 @@ def _settle_successful_reference(reference):
                 net = txn.amount * (1 - settings.PLATFORM_COMMISSION)
                 tp.pending_payout += net; tp.total_earnings += net
                 tp.save(update_fields=['pending_payout', 'total_earnings'])
+
+    if txn and txn.status == 'success' and txn.lesson and not (txn.metadata or {}).get('receipt_email_sent'):
+        try:
+            from apps.notifications import send_paid_lesson_receipt
+            send_paid_lesson_receipt(txn)
+            txn.metadata = {**(txn.metadata or {}), 'receipt_email_sent': True}
+            txn.save(update_fields=['metadata'])
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception('Paid lesson receipt delivery failed for transaction %s', txn.pk)
+
     subscription = Subscription.objects.filter(paystack_ref=reference).first()
     if subscription and subscription.status != 'active':
         now = timezone.now()

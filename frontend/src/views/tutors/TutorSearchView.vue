@@ -187,14 +187,15 @@
                   </div>
                 </div>
                 <ReviewList v-if="mTab==='reviews'" :reviews="modalReviews" :loading="reviewsLoading" />
-                <BookingWidget v-if="mTab==='book'" :tutor="selected" :loading="booking"
+                <div v-if="mTab==='book' && !auth.isAuthenticated" class="alert alert-info small">Please <RouterLink :to="{name:'login', query:{next:'/tutors'}}">log in</RouterLink> to book this tutor.</div>
+                <BookingWidget v-else-if="mTab==='book'" :tutor="selected" :loading="booking"
                                @book="confirmBook" />
               </div>
               <div class="col-md-4">
                 <div class="gp-card p-4 mb-3">
                   <div class="fw-800 fs-3 text-gp-primary mb-3">GHS {{ selected.hourly_rate }}<span class="text-muted fw-400 small">/hr</span></div>
                   <div class="d-grid gap-2">
-                    <button class="btn btn-gp py-2" @click="mTab='book'"><i class="bi bi-calendar-plus me-2"></i>Book a Lesson</button>
+                    <button class="btn btn-gp py-2" @click="auth.isAuthenticated ? (mTab='book') : router.push({name:'login', query:{next:'/tutors'}})"><i class="bi bi-calendar-plus me-2"></i>Book a Lesson</button>
                     <button class="btn btn-gp-outline" @click="msgTutor(selected)"><i class="bi bi-chat me-2"></i>Message</button>
                     <button class="btn btn-outline-secondary" @click="toggleFav(selected)">
                       <i class="bi me-2" :class="favs.has(selected.id)?'bi-heart-fill text-danger':'bi-heart'"></i>

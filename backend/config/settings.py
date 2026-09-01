@@ -102,10 +102,11 @@ USE_I18N = True
 USE_TZ = True
 # Set FORCE_SCRIPT_NAME only when the application is served from a subfolder.
 # FORCE_SCRIPT_NAME = config('FORCE_SCRIPT_NAME', default='') or None
-STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_DIRS = [BASE_DIR / 'static']
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
-STATIC_URL = "/static/"
 
 # Static files remain local in development. Production can use S3 by setting
 # AWS_STORAGE_BUCKET_NAME and running collectstatic after deployment.

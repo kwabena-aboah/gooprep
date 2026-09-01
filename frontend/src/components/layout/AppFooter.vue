@@ -48,6 +48,24 @@
     </div>
   </footer>
 </template>
+<script setup>
+import { computed } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+
+const auth = useAuthStore()
+const groupClassesTarget = computed(() => {
+  if (auth.isInstitution) return '/institution'
+  if (auth.isTutor) return '/dashboard'
+  if (auth.isAdmin) return '/admin'
+  return '/group-classes'
+})
+const groupClassesLabel = computed(() => {
+  if (auth.isInstitution) return 'Institution workspace'
+  if (auth.isTutor) return 'Tutor dashboard'
+  if (auth.isAdmin) return 'Admin dashboard'
+  return 'Group Classes'
+})
+</script>
 <style scoped>
 .footer-link{color:#64748b;font-size:.875rem;display:block;margin-bottom:.4rem;transition:color .2s;text-decoration:none}
 .footer-link:hover{color:#f5a800}

@@ -63,6 +63,10 @@
               <RouterLink v-if="l.can_join" :to="`/lessons/${l.id}/join`" class="btn btn-gp btn-sm">
                 <i class="bi bi-camera-video-fill me-1"></i>Join Now
               </RouterLink>
+              <button v-if="auth.isStudent && l.payment_status !== 'paid' && !['completed', 'cancelled'].includes(l.status)" class="btn btn-sm btn-outline-warning"
+                      @click="openPayment(l)">
+                <i class="bi bi-credit-card me-1"></i>Complete payment
+              </button>
               <button v-if="l.status==='confirmed' && !l.can_join" class="btn btn-sm btn-outline-secondary"
                       @click="reschedule(l)">
                 <i class="bi bi-calendar-event me-1"></i>Reschedule
@@ -84,6 +88,13 @@
         </div>
       </div>
     </div>
+
+    <PaymentPrompt
+      v-if="paymentLesson"
+      :lesson="paymentLesson"
+      :tutor-name="paymentLesson.tutor_name || 'your tutor'"
+      @cancel="paymentLesson = null"
+    />
 
     <GpPagination :page="page" :total-pages="totalPages" @change="changePage" />
 
@@ -156,6 +167,7 @@ import GpEmpty      from '@/components/common/GpEmpty.vue'
 import GpPagination from '@/components/common/GpPagination.vue'
 import FlashcardDeck from '@/components/student/FlashcardDeck.vue'
 import QuizWidget    from '@/components/student/QuizWidget.vue'
+import PaymentPrompt from '@/components/payments/PaymentPrompt.vue'
 
 const auth       = useAuthStore()
 const notifStore = useNotifStore()
@@ -172,6 +184,7 @@ const aiTab      = ref('summary')
 const reviewLesson  = ref(null)
 const reviewForm    = ref({ rating: 0, content: '', would_recommend: true })
 const reviewLoading = ref(false)
+const paymentLesson = ref(null)
 
 const totalPages = computed(() => Math.ceil(total.value / pageSize))
 const statusTabs = computed(() => [
@@ -197,6 +210,7 @@ async function fetchLessons() {
 function setStatus(s) { activeStatus.value = s; page.value = 1; fetchLessons() }
 function changePage(p) { page.value = p; fetchLessons(); window.scrollTo(0,0) }
 function reschedule(l) { router.push(`/lessons/${l.id}/reschedule`) }
+function openPayment(lesson) { paymentLesson.value = lesson }
 
 async function viewDetail(l) {
   try {

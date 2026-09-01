@@ -6,16 +6,21 @@ from urllib.parse import urlparse
 import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-SECRET_KEY = config("SECRET_KEY", default="gooprep-dev-secret-2024-change-in-prod")
+SECRET_KEY = "gooprep-dev-secret-2024-change-in-prod"
 # DEBUG = config("DEBUG", default=True, cast=bool)
 # ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="127.0.0.1,.vercel.app", cast=Csv())
 # SECRET_KEY = config("SECRET_KEY", default="gooprep-dev-secret-2024-change-in-prod")
 DEBUG = config("DEBUG", default=True, cast=bool)
-ALLOWED_HOSTS = config(
+_allowed_hosts = config(
     "ALLOWED_HOSTS",
-    default="localhost,127.0.0.1,[::1]",
+    default="",
     cast=Csv(),
 )
+# A blank local .env value must not reject requests from the local dev server.
+ALLOWED_HOSTS = sorted(set(
+    (_allowed_hosts or ['localhost', '127.0.0.1', '[::1]', 'testserver'])
+    if DEBUG else _allowed_hosts
+))
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -154,17 +159,28 @@ SIMPLE_JWT = {
     "ROTATE_REFRESH_TOKENS":True,
     "BLACKLIST_AFTER_ROTATION":True,
 }
-CORS_ALLOWED_ORIGINS = config(
-    'CORS_ALLOWED_ORIGINS',
-    default='http://localhost:5173,http://localhost:3000',
-    cast=lambda value: [origin.strip().rstrip('/') for origin in value.split(',') if origin.strip()],
-)
-CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=False, cast=bool)
-CSRF_TRUSTED_ORIGINS = config(
-    'CSRF_TRUSTED_ORIGINS',
-    default='http://localhost:5173,http://localhost:3000',
-    cast=lambda value: [origin.strip().rstrip('/') for origin in value.split(',') if origin.strip()],
-)
+
+# -------------------------------------------------------------------
+# CORS
+# -------------------------------------------------------------------
+
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in config(
+        "CORS_ALLOWED_ORIGINS",
+        default="http://localhost:5173,http://127.0.0.1:5173",
+    ).split(",")
+    if origin.strip()
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in config(
+        "CSRF_TRUSTED_ORIGINS",
+        default="http://localhost:5173,http://127.0.0.1:5173",
+    ).split(",")
+    if origin.strip()
+]
 CORS_ALLOW_CREDENTIALS = True
 CHANNEL_LAYERS = {"default":{"BACKEND":"channels.layers.InMemoryChannelLayer"}}
 CELERY_BROKER_URL = config("CELERY_BROKER_URL", default="redis://localhost:6379/0")

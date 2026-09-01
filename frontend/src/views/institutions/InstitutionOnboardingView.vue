@@ -5,7 +5,15 @@
       <p class="text-muted small mb-4">Complete these details so our team can review your institution account.</p>
       <div v-if="error" class="alert alert-danger">{{ error }}</div>
       <div class="row g-3">
-        <div class="col-12"><label class="form-label small fw-600">Institution name *</label><input class="form-control" v-model="form.name" required /></div>
+        <div class="col-12">
+          <label class="form-label small fw-600">Institution name *</label>
+          <select class="form-select" v-model="institutionSelection" required>
+            <option value="" disabled>Select your institution</option>
+            <option v-for="institution in institutionOptions" :key="institution" :value="institution">{{ institution }}</option>
+            <option value="__other__">Other — enter institution name</option>
+          </select>
+          <input v-if="institutionSelection === '__other__'" class="form-control mt-2" v-model="customInstitutionName" placeholder="Enter your institution's name" required />
+        </div>
         <div class="col-md-6"><label class="form-label small fw-600">Institution type *</label><select class="form-select" v-model="form.type"><option value="school">School</option><option value="university">University</option><option value="organisation">Organisation</option><option value="ngo">NGO</option></select></div>
         <div class="col-md-6"><label class="form-label small fw-600">City *</label><input class="form-control" v-model="form.city" required placeholder="Accra, Kumasi…" /></div>
         <div class="col-12"><label class="form-label small fw-600">Address *</label><textarea class="form-control" v-model="form.address" rows="2" required /></div>
@@ -23,15 +31,27 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { apiGet, apiPatch } from '@/utils/api'
 import { useNotifStore } from '@/stores/notifs'
+import { GHANA_INSTITUTIONS } from '@/utils/ghanaInstitutions'
 const router = useRouter(); const notifStore = useNotifStore()
 const saving = ref(false); const error = ref('')
+const institutionOptions = GHANA_INSTITUTIONS.filter(name => name !== 'Other Ghanaian institution')
+const institutionSelection = ref('')
+const customInstitutionName = ref('')
 const form = ref({ name:'', type:'school', city:'', address:'', contact_email:'', contact_phone:'', website:'', description:'' })
-const valid = computed(() => form.value.name.trim() && form.value.city.trim() && form.value.address.trim() && form.value.contact_email.trim() && form.value.contact_phone.trim())
+const institutionName = computed(() => institutionSelection.value === '__other__' ? customInstitutionName.value.trim() : institutionSelection.value.trim())
+const valid = computed(() => Boolean(institutionName.value && form.value.city.trim() && form.value.address.trim() && form.value.contact_email.trim() && form.value.contact_phone.trim()))
 async function save() {
   saving.value = true; error.value = ''
-  try { await apiPatch('/institutions/', form.value); notifStore.toast('Institution submitted for approval.', 'success'); router.push('/institution') }
+  try { await apiPatch('/institutions/', { ...form.value, name: institutionName.value }); notifStore.toast('Institution submitted for approval.', 'success'); router.push('/institution') }
   catch (e) { error.value = Object.values(e.response?.data || {}).flat().join(' ') || 'Could not save institution details.' }
   finally { saving.value = false }
 }
-onMounted(async () => { try { const { data } = await apiGet('/institutions/'); Object.assign(form.value, data) } catch {} })
+onMounted(async () => {
+  try {
+    const { data } = await apiGet('/institutions/')
+    Object.assign(form.value, data)
+    if (institutionOptions.includes(data.name)) institutionSelection.value = data.name
+    else if (data.name) { institutionSelection.value = '__other__'; customInstitutionName.value = data.name }
+  } catch {}
+})
 </script>

@@ -45,7 +45,7 @@
           <input class="form-check-input" type="checkbox" v-model="agreed" id="chkTerms"/>
           <label class="form-check-label small" for="chkTerms">I agree to Gooprep's <RouterLink to="/terms" target="_blank" class="text-gp-primary">Terms</RouterLink> & <RouterLink to="/privacy" target="_blank" class="text-gp-primary">Privacy Policy</RouterLink></label>
         </div>
-        <button class="btn btn-gp w-100 py-2 mb-3" @click="submit" :disabled="auth.loading||!agreed||form.password!==form.password2">
+        <button class="btn btn-gp w-100 py-2 mb-3" @click="submit" :disabled="auth.loading||!agreed||!form.phone.trim()||(form.role==='institution'&&!form.institution_name.trim())||form.password!==form.password2">
           <span v-if="auth.loading" class="spinner-border spinner-border-sm me-2"></span>
           <i v-else class="bi bi-person-plus me-2"></i>Create Account
         </button>

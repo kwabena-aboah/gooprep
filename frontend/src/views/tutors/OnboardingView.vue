@@ -224,7 +224,6 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useNotifStore } from '@/stores/notifs'
 import { apiGet, apiPost, apiUpload } from '@/utils/api'
-import { GHANA_INSTITUTIONS } from '@/utils/ghanaInstitutions'
 
 const auth       = useAuthStore()
 const notifStore = useNotifStore()
@@ -254,7 +253,10 @@ const form  = ref({
 const draftKey = computed(() => `gooprep:tutor-onboarding:${auth.user?.id || 'guest'}`)
 
 function saveDraft() {
-  localStorage.setItem(draftKey.value, JSON.stringify({ form: form.value, step: step.value }))
+  localStorage.setItem(draftKey.value, JSON.stringify({
+    form: form.value,
+    step: step.value,
+  }))
 }
 function restoreDraft(profile) {
   try {
@@ -322,7 +324,8 @@ async function submit() {
       date_of_birth: form.value.date_of_birth, gender: form.value.gender,
       instant_book: form.value.instant_book, trial_lesson_enabled: form.value.trial_lesson_enabled,
       trial_lesson_price: form.value.trial_lesson_price,
-      education: JSON.stringify(form.value.education), intro_video_url: form.value.intro_video_url,
+      education: JSON.stringify(form.value.education),
+      intro_video_url: form.value.intro_video_url,
       identity_document_type: form.value.identity_document_type,
     }).forEach(([key, value]) => fd.append(key, value))
     form.value.subjects.forEach(subject => fd.append('subjects', subject))

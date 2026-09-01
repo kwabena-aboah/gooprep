@@ -32,6 +32,9 @@ class TutorProfileSerializer(serializers.ModelSerializer):
     country       = serializers.SerializerMethodField()
     subjects_list = serializers.SerializerMethodField()
     phone         = serializers.CharField(source='user.phone', read_only=True, allow_blank=True)
+    address       = serializers.CharField(source='user.address', read_only=True, allow_blank=True)
+    date_of_birth = serializers.DateField(source='user.date_of_birth', read_only=True, allow_null=True)
+    gender        = serializers.CharField(source='user.gender', read_only=True, allow_blank=True)
     verification_documents = serializers.SerializerMethodField()
 
     class Meta:

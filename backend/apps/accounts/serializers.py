@@ -26,6 +26,9 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class RegisterSerializer(serializers.ModelSerializer):
+    # Email is the public login identifier; username remains an internal
+    # compatibility field for Django's authentication backend.
+    username        = serializers.CharField(required=False, allow_blank=True, max_length=150)
     password        = serializers.CharField(write_only=True, min_length=8)
     password2       = serializers.CharField(write_only=True)
     was_referred    = serializers.BooleanField(required=False, default=False)
@@ -46,7 +49,8 @@ class RegisterSerializer(serializers.ModelSerializer):
         return normalized
 
     def validate_email(self, v):
-        if User.objects.filter(email=v.lower()).exists():
+        v = v.strip().lower()
+        if User.objects.filter(email=v).exists():
             raise serializers.ValidationError('An account with this email already exists.')
         return v.lower()
 
@@ -62,6 +66,16 @@ class RegisterSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         pw = validated_data.pop('password')
         institution_name = validated_data.pop('institution_name', '').strip()
+        username = (validated_data.pop('username', '') or '').strip()
+        email = validated_data.get('email', '').lower().strip()
+        if not username:
+            base = email.split('@', 1)[0][:130] or 'user'
+            username = base
+            suffix = 1
+            while User.objects.filter(username=username).exists():
+                suffix += 1
+                username = f'{base[:140 - len(str(suffix))]}{suffix}'
+        validated_data['username'] = username
         user = User(**validated_data)
         user.set_password(pw)
         user.save()

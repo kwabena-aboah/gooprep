@@ -1278,9 +1278,15 @@ async function confirmBook(form) {
    * Prepare request.
    */
 
+  if (!auth.user?.id) {
+    bookingError.value = 'Please sign in before booking a lesson.'
+    return
+  }
+
   const payload = {
 
     tutor: tutorId,
+    student: auth.user.id,
 
     subject: form.subject || null,
 

@@ -32,6 +32,8 @@ class RegisterView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
+        # Account creation must not fail because SMTP is unavailable. The
+        # token is still stored so the email can be resent after configuration.
         self._send_verification_email(user)
         refresh = RefreshToken.for_user(user)
         return Response({'access': str(refresh.access_token), 'refresh': str(refresh), 'user': UserSerializer(user).data}, status=201)
@@ -42,13 +44,20 @@ class RegisterView(generics.CreateAPIView):
         token = EmailVerificationToken.objects.create(user=user, token=uuid.uuid4().hex)
         frontend_url = settings.FRONTEND_URL or 'http://localhost:5173'
         verify_url = f'{frontend_url}/verify-email?token={token.token}'
-        send_mail(
-            'Verify your Gooprep email address',
-            f'Welcome to Gooprep! Verify your email within 24 hours: {verify_url}',
-            settings.DEFAULT_FROM_EMAIL,
-            [user.email],
-            fail_silently=False,
-        )
+        try:
+            send_mail(
+                'Verify your Gooprep email address',
+                f'Welcome to Gooprep! Verify your email within 24 hours: {verify_url}',
+                settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+                fail_silently=False,
+            )
+        except Exception:
+            # Keep registration successful; resend remains available later.
+            import logging
+            logging.getLogger(__name__).exception(
+                'Verification email delivery failed for user %s', user.pk
+            )
 
 
 class LogoutView(APIView):

@@ -67,7 +67,8 @@ const email = ref('')
 const password = ref('')
 const showPw = ref(false)
 async function submit() {
-  const { ok } = await auth.login(email.value, password.value)
+  if (!email.value.trim() || !password.value) return
+  const { ok } = await auth.login(email.value.trim(), password.value)
   if (ok) router.push(route.query.next || '/dashboard')
 }
 </script>

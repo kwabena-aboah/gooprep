@@ -93,6 +93,13 @@ class LessonSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
+        extra_kwargs = {
+            "student": {
+                "required": False,
+                "allow_null": True,
+            },
+        }
+
         read_only_fields = [
             "id",
             "tutor_name",

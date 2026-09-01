@@ -41,6 +41,11 @@
         <RouterLink class="sidebar-link" :class="{active:isActive('/storefront')}" to="/storefront"><i class="bi bi-shop"></i>My Storefront</RouterLink>
         <RouterLink class="sidebar-link" :class="{active:isActive('/earnings')}" to="/earnings"><i class="bi bi-wallet2"></i>Earnings</RouterLink>
       </template>
+      <template v-if="auth.user?.role === 'institution'">
+        <div class="sidebar-section">Institution</div>
+        <RouterLink class="sidebar-link" :class="{active:route.path === '/institution'}" to="/institution"><i class="bi bi-building"></i>Institution workspace</RouterLink>
+        <RouterLink class="sidebar-link" :class="{active:route.path === '/institution-onboarding'}" to="/institution-onboarding"><i class="bi bi-clipboard-check"></i>Continue onboarding</RouterLink>
+      </template>
       <template v-if="auth.isAdmin">
         <div class="sidebar-section">Administration</div>
         <RouterLink class="sidebar-link" :class="{active:route.path==='/admin'}" to="/admin"><i class="bi bi-graph-up-arrow"></i>Overview</RouterLink>

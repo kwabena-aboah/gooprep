@@ -18,7 +18,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { apiGet, apiUpload } from '@/utils/api'
 import { useNotifStore } from '@/stores/notifs'
@@ -42,7 +42,10 @@ const userId = JSON.parse(localStorage.getItem('gp_user') || '{}').id || 'guest'
 const draftKey = `gooprep:student-onboarding:${userId}`
 
 function saveDraft() {
-  localStorage.setItem(draftKey, JSON.stringify({ form: form.value, subjectsText: subjectsText.value }))
+  localStorage.setItem(draftKey, JSON.stringify({
+    form: form.value,
+    subjectsText: subjectsText.value,
+  }))
 }
 
 function restoreDraft(profile) {
@@ -72,7 +75,7 @@ async function save() {
   saving.value = true
   try {
     const fd = new FormData()
-    fd.append('date_of_birth', form.value.date_of_birth)
+    if (form.value.date_of_birth) fd.append('date_of_birth', form.value.date_of_birth)
     fd.append('gender', form.value.gender)
     fd.append('city', form.value.city)
     fd.append('address', form.value.address)

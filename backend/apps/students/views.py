@@ -57,7 +57,11 @@ class StudentProfileView(APIView):
         changed_fields = []
         for field in user_fields:
             if field in request.data:
-                setattr(request.user, field, request.data[field])
+                value = request.data[field]
+                # Nullable date fields must receive None, not an empty string.
+                if field == 'date_of_birth' and value == '':
+                    value = None
+                setattr(request.user, field, value)
                 changed_fields.append(field)
         if changed_fields:
             request.user.save(update_fields=changed_fields)

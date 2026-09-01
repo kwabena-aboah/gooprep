@@ -8,7 +8,7 @@ import dj_database_url
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config("SECRET_KEY", default="gooprep-dev-secret-2024-change-in-prod")
 DEBUG = config("DEBUG", default=True, cast=bool)
-ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="127.0.0.1", cast=Csv())
+ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="127.0.0.1,.vercel.app", cast=Csv())
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -101,7 +101,7 @@ TIME_ZONE = "Africa/Accra"
 USE_I18N = True
 USE_TZ = True
 # Set FORCE_SCRIPT_NAME only when the application is served from a subfolder.
-FORCE_SCRIPT_NAME = config('FORCE_SCRIPT_NAME', default='') or None
+# FORCE_SCRIPT_NAME = config('FORCE_SCRIPT_NAME', default='') or None
 STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"

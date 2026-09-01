@@ -13,37 +13,34 @@
       }
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "src": "/api/(.*)",
-      "dest": "backend/api/index.py"
+      "source": "/api/(.*)",
+      "destination": "backend/api/index.py"
     },
     {
-      "src": "/django-admin/(.*)",
-      "dest": "backend/api/index.py"
+      "source": "/django-admin/(.*)",
+      "destination": "backend/api/index.py"
     },
     {
-      "src": "/tinymce/(.*)",
-      "dest": "backend/api/index.py"
+      "source": "/tinymce/(.*)",
+      "destination": "backend/api/index.py"
     },
     {
-      "src": "/static/(.*)",
-      "dest": "backend/api/index.py"
+      "source": "/static/(.*)",
+      "destination": "backend/api/index.py"
     },
     {
-      "src": "/media/(.*)",
-      "dest": "backend/api/index.py"
+      "source": "/media/(.*)",
+      "destination": "backend/api/index.py"
     },
     {
-      "src": "/webhooks/(.*)",
-      "dest": "backend/api/index.py"
+      "source": "/webhooks/(.*)",
+      "destination": "backend/api/index.py"
     },
     {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "frontend/$1"
+      "source": "/((?!api/|django-admin/|tinymce/|static/|media/|webhooks/).*)",
+      "destination": "/index.html"
     }
   ]
 }

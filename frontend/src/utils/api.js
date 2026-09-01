@@ -111,6 +111,7 @@ api.interceptors.response.use(
 
         localStorage.removeItem('access_token')
         localStorage.removeItem('refresh_token')
+        localStorage.removeItem('gp_user')
 
         return Promise.reject(error)
       }
@@ -244,9 +245,12 @@ export const apiUpload = (
 */
 
 export function createWS(path) {
-  const base =
-    import.meta.env.VITE_WS_URL ||
-    'ws://localhost:8000'
+  const configuredWsUrl = import.meta.env.VITE_WS_URL
+  const apiUrl = import.meta.env.VITE_API_URL
+  const derivedWsUrl = apiUrl
+    ? apiUrl.replace(/^http/, 'ws')
+    : ''
+  const base = configuredWsUrl || derivedWsUrl || 'ws://localhost:8000'
 
   const token =
     localStorage.getItem('access_token')

@@ -18,7 +18,7 @@ _allowed_hosts = config(
 )
 # A blank local .env value must not reject requests from the local dev server.
 ALLOWED_HOSTS = sorted(set(
-    (_allowed_hosts or ['localhost', '127.0.0.1', '[::1]', 'testserver'])
+    (_allowed_hosts or ['localhost', '127.0.0.1', '[::1]', '.vercel.app'])
     if DEBUG else _allowed_hosts
 ))
 INSTALLED_APPS = [

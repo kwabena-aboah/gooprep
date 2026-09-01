@@ -15,7 +15,7 @@
         <div class="col-6 col-lg-2">
           <h6 style="color:#fff;font-weight:700;margin-bottom:1rem">Platform</h6>
           <RouterLink to="/tutors" class="footer-link">Find Tutors</RouterLink>
-          <RouterLink to="/group-classes" class="footer-link">Group Classes</RouterLink>
+          <RouterLink :to="groupClassesTarget" class="footer-link">{{ groupClassesLabel }}</RouterLink>
           <RouterLink to="/subscription" class="footer-link">Pricing</RouterLink>
         </div>
         <div class="col-6 col-lg-2">

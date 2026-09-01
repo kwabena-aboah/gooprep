@@ -140,7 +140,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { apiGet } from '@/utils/api'
+import { apiGet, apiPost } from '@/utils/api'
 import { timeAgo } from '@/utils/helpers'
 import GpSpinner from '@/components/common/GpSpinner.vue'
 import GpEmpty   from '@/components/common/GpEmpty.vue'

@@ -19,6 +19,18 @@
       "dest": "backend/api/index.py"
     },
     {
+      "src": "/django-admin/(.*)",
+      "dest": "backend/api/index.py"
+    },
+    {
+      "src": "/tinymce/(.*)",
+      "dest": "backend/api/index.py"
+    },
+    {
+      "src": "/webhooks/(.*)",
+      "dest": "backend/api/index.py"
+    },
+    {
       "handle": "filesystem"
     },
     {

@@ -19,6 +19,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
+    "django_bigbluebutton",
     "corsheaders",
     "django_filters",
     "channels",
@@ -194,6 +195,8 @@ BBB_URL              = config("BBB_URL", default="")
 # BBB_SECRET remains supported for existing deployments.
 BBB_KEY              = config("BBB_KEY", default=config("BBB_SECRET", default=""))
 BBB_SECRET           = BBB_KEY
+BBB_API_URL = BBB_URL
+BBB_SECRET_KEY = BBB_SECRET
 GUPPY_ENABLED        = config("GUPPY_ENABLED", default=False, cast=bool)
 GUPPY_API_URL        = config("GUPPY_API_URL", default="https://api.guppymessenger.com/v1")
 GUPPY_APP_ID         = config("GUPPY_APP_ID", default="")

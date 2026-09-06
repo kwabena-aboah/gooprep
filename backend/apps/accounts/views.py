@@ -34,9 +34,17 @@ class RegisterView(generics.CreateAPIView):
         user = serializer.save()
         # Account creation must not fail because SMTP is unavailable. The
         # token is still stored so the email can be resent after configuration.
-        self._send_verification_email(user)
-        refresh = RefreshToken.for_user(user)
-        return Response({'access': str(refresh.access_token), 'refresh': str(refresh), 'user': UserSerializer(user).data}, status=201)
+        verification_sent = self._send_verification_email(user)
+        return Response({
+            'verification_sent': verification_sent,
+            'email': user.email,
+            'detail': (
+                'Verification email sent. Please check your inbox before signing in.'
+                if verification_sent else
+                'Your account was created, but we could not send the verification email. '
+                'Please contact support or request a new verification email.'
+            ),
+        }, status=201)
 
 
     @staticmethod
@@ -53,11 +61,13 @@ class RegisterView(generics.CreateAPIView):
                 fail_silently=False,
             )
         except Exception:
-            # Keep registration successful; resend remains available later.
+            # Keep registration successful; the token remains available for a resend.
             import logging
             logging.getLogger(__name__).exception(
                 'Verification email delivery failed for user %s', user.pk
             )
+            return False
+        return True
 
 
 class LogoutView(APIView):

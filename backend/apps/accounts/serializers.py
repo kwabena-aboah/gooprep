@@ -122,6 +122,10 @@ class CustomTokenObtainPairSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {'detail': 'No active account found with the given credentials'}
             )
+        if not user.email_verified:
+            raise serializers.ValidationError({
+                'detail': 'Please verify your email address before signing in.'
+            })
         refresh = RefreshToken.for_user(user)
         return {
             'refresh': str(refresh),

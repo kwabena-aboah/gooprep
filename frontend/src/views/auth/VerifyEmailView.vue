@@ -4,7 +4,7 @@
       <i class="bi" :class="loading ? 'bi-envelope-paper text-primary' : verified ? 'bi-check-circle-fill text-success' : 'bi-x-circle-fill text-danger'" style="font-size:3rem"></i>
       <h2 class="fw-800 mt-3">{{ loading ? 'Verifying your email…' : verified ? 'Email verified' : 'Verification failed' }}</h2>
       <p class="text-muted">{{ message }}</p>
-      <RouterLink v-if="verified" to="/dashboard" class="btn btn-gp">Continue to Gooprep</RouterLink>
+      <RouterLink v-if="verified" to="/login" class="btn btn-gp">Continue to sign in</RouterLink>
       <RouterLink v-else to="/login" class="btn btn-outline-secondary">Go to login</RouterLink>
     </div>
   </div>

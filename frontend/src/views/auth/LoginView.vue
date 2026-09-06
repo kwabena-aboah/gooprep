@@ -68,7 +68,10 @@ const password = ref('')
 const showPw = ref(false)
 async function submit() {
   if (!email.value.trim() || !password.value) return
-  const { ok } = await auth.login(email.value.trim(), password.value)
-  if (ok) router.push(route.query.next || '/dashboard')
+  const result = await auth.login(email.value.trim(), password.value)
+  if (result.ok) {
+    // Verified users complete their role-specific onboarding before entering the app.
+    router.push(result.onboardingPath || route.query.next || '/dashboard')
+  }
 }
 </script>

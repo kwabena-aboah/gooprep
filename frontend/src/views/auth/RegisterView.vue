@@ -6,6 +6,14 @@
         <p class="text-white-50 mt-2">Join thousands of learners and expert tutors.</p>
       </div>
       <div class="gp-card p-4 p-md-5">
+        <div v-if="registered" class="text-center py-3">
+          <i class="bi bi-envelope-check text-success" style="font-size:3.5rem"></i>
+          <h2 class="fw-800 mt-3">Check your email</h2>
+          <p class="text-muted mb-2">{{ registrationMessage }}</p>
+          <p class="small text-muted">We sent a verification link to <strong>{{ registeredEmail }}</strong>. Verify your email first, then sign in.</p>
+          <RouterLink to="/login" class="btn btn-gp w-100 mt-2">Go to sign in</RouterLink>
+        </div>
+        <div v-else>
         <div v-if="auth.error" class="alert alert-danger small py-2">{{ auth.error }}</div>
         <div class="mb-4">
           <label class="form-label small fw-600 text-muted text-uppercase" style="letter-spacing:.06em">I want to</label>
@@ -50,16 +58,19 @@
           <i v-else class="bi bi-person-plus me-2"></i>Create Account
         </button>
         <p class="text-center small text-muted mb-0">Already have an account? <RouterLink to="/login" class="text-gp-primary fw-600">Sign in</RouterLink></p>
+        </div>
       </div>
     </div>
   </div>
 </template>
 <script setup>
 import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-const auth=useAuthStore(); const router=useRouter()
+const auth=useAuthStore()
 const showPw=ref(false); const agreed=ref(false)
+const registered=ref(false)
+const registeredEmail=ref('')
+const registrationMessage=ref('')
 const form=ref({first_name:'',last_name:'',email:'',phone:'',institution_name:'',password:'',password2:'',role:'student'})
 const roles=[{value:'student',label:'Learn',sub:'Find tutors',icon:'bi bi-mortarboard'},{value:'tutor',label:'Teach',sub:'Earn income',icon:'bi bi-person-video3'},{value:'institution',label:'Manage',sub:'Bulk enrol',icon:'bi bi-building'}]
 const strength=computed(()=>{const p=form.value.password;if(!p)return 0;let s=0;if(p.length>=8)s++;if(/[A-Z]/.test(p))s++;if(/[0-9]/.test(p))s++;if(/[^A-Za-z0-9]/.test(p))s++;return Math.max(1,s)})
@@ -69,8 +80,11 @@ const strengthColor=computed(()=>colors[strength.value-1])
 const strengthLabel=computed(()=>labels[strength.value-1])
 async function submit(){
   if(!form.value.phone.trim() || (form.value.role==='institution'&&!form.value.institution_name.trim())) return
-  const selectedRole=form.value.role
-  const{ok}=await auth.register(form.value)
-  if(ok) router.push(selectedRole==='tutor'?'/tutor-onboarding':selectedRole==='student'?'/student-onboarding':'/institution-onboarding')
+  const result=await auth.register(form.value)
+  if(result.ok){
+    registeredEmail.value=result.email || form.value.email
+    registrationMessage.value=result.detail || 'Verification email sent. Please check your inbox before signing in.'
+    registered.value=true
+  }
 }
 </script>

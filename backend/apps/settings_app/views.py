@@ -134,7 +134,11 @@ class BBBTestView(APIView):
     def post(self, request):
         from sage_bbb.services.client import BigBlueButtonClient
         url = (request.data.get('url') or getattr(settings, 'BBB_URL', '')).strip()
-        secret = (request.data.get('secret') or getattr(settings, 'BBB_KEY', '')).strip()
+        secret = (
+            request.data.get('secret')
+            or getattr(settings, 'BBB_KEY', '')
+            or getattr(settings, 'BBB_SECRET', '')
+        ).strip()
         if not url or not secret:
             return Response({'success': False, 'error': 'BBB URL and key are required.'}, status=400)
         try:
@@ -159,6 +163,7 @@ class BBBTestView(APIView):
                 'recordings_ok': recordings_ok,
                 'message': '' if success else 'BBB API authentication failed for one or more operational calls.',
                 'details': {
+                    'endpoint': getattr(client.url_builder, 'bbb_server_base_url', url),
                     'meetings': meetings.get('message', ''),
                     'recordings': recordings.get('message', ''),
                 },

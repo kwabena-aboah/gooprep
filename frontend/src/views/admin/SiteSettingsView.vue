@@ -163,6 +163,8 @@ onMounted(async () => {
   try {
     const { data } = await apiGet('/settings/')
     Object.assign(s.value, data)
+    // The API historically calls this field bbb_secret; the form uses bbb_key.
+    if (!s.value.bbb_key) s.value.bbb_key = s.value.bbb_secret || ''
     await checkHealth()
   } catch {} finally { loading.value = false }
 })

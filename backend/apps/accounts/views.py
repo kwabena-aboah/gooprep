@@ -1,15 +1,21 @@
+import logging
 import uuid
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 from django.conf import settings
 from .models import Notification, PasswordResetToken, EmailVerificationToken
 from .serializers import RegisterSerializer, UserSerializer, NotificationSerializer, CustomTokenObtainPairSerializer
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -162,37 +168,182 @@ def resend_verification_email(request):
 
 
 @api_view(['POST'])
-@permission_classes([permissions.AllowAny])
+@permission_classes([AllowAny])
 def request_password_reset(request):
-    email = request.data.get('email', '').lower().strip()
-    user = User.objects.filter(email=email).first()
-    if user:
-        token = PasswordResetToken.objects.create(user=user, token=uuid.uuid4().hex)
-        reset_url = f'{settings.FRONTEND_URL}/reset-password?email={email}&token={token.token}'
-        send_mail('Reset your Gooprep password', f'Reset your password here: {reset_url}', settings.DEFAULT_FROM_EMAIL, [email], fail_silently=True)
-    return Response({'detail': 'If that email is registered, a reset link has been sent.'})
+    email = str(request.data.get('email', '')).strip().lower()
+
+    if not email:
+        return Response(
+            {'email': ['Email address is required.']},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    user = User.objects.filter(email__iexact=email).first()
+
+    # Always return the same response whether the account exists or not.
+    # This prevents user/account enumeration.
+    if not user:
+        return Response({
+            'detail': 'If that email is registered, a reset link has been sent.'
+        })
+
+    # Invalidate previous unused tokens
+    PasswordResetToken.objects.filter(
+        user=user,
+        used=False
+    ).update(used=True)
+
+    # Create a new token
+    token = PasswordResetToken.objects.create(
+        user=user,
+        token=uuid.uuid4().hex
+    )
+
+    frontend_url = (
+        settings.FRONTEND_URL or
+        'http://localhost:5173'
+    ).rstrip('/')
+
+    reset_url = (
+        f'{frontend_url}/reset-password'
+        f'?email={email}&token={token.token}'
+    )
+
+    try:
+        send_mail(
+            subject='Reset your Gooprep password',
+            message=(
+                'You requested a password reset for your Gooprep account.\n\n'
+                f'Reset your password here:\n{reset_url}\n\n'
+                'If you did not request this password reset, you can safely '
+                'ignore this email.'
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[email],
+            fail_silently=False,
+        )
+
+    except Exception:
+        logger.exception(
+            'Password reset email failed for user %s',
+            user.pk
+        )
+
+        # Invalidate the token if email delivery failed
+        token.used = True
+        token.save(update_fields=['used'])
+
+        return Response(
+            {
+                'detail': (
+                    'We could not send the password reset email. '
+                    'Please try again later.'
+                )
+            },
+            status=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+
+    return Response({
+        'detail': 'If that email is registered, a reset link has been sent.'
+    })
 
 
 @api_view(['POST'])
-@permission_classes([permissions.AllowAny])
+@permission_classes([AllowAny])
 def confirm_password_reset(request):
-    email = request.data.get('email', '').lower()
-    token = request.data.get('token', '')
-    password1 = request.data.get('new_password1', '')
-    password2 = request.data.get('new_password2', '')
+    email = str(request.data.get('email', '')).strip().lower()
+    token_value = str(request.data.get('token', '')).strip()
+    password1 = str(request.data.get('new_password1', ''))
+    password2 = str(request.data.get('new_password2', ''))
+
+    # Validate required fields
+    errors = {}
+
+    if not email:
+        errors['email'] = ['Email address is required.']
+
+    if not token_value:
+        errors['token'] = ['Reset token is required.']
+
+    if not password1:
+        errors['new_password1'] = ['New password is required.']
+
+    if not password2:
+        errors['new_password2'] = ['Password confirmation is required.']
+
+    if errors:
+        return Response(
+            errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Confirm passwords match
     if password1 != password2:
-        return Response({'new_password2': ['Passwords do not match.']}, status=400)
-    if len(password1) < 8:
-        return Response({'new_password1': ['Min 8 characters.']}, status=400)
+        return Response(
+            {
+                'new_password2': [
+                    'Passwords do not match.'
+                ]
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Find reset token
     try:
-        reset = PasswordResetToken.objects.get(token=token, user__email=email)
-        if not reset.is_valid():
-            return Response({'detail': 'Token expired.'}, status=400)
-        reset.user.set_password(password1); reset.user.save()
-        reset.used = True; reset.save(update_fields=['used'])
-        return Response({'detail': 'Password reset successfully.'})
+        reset = (
+            PasswordResetToken.objects
+            .select_related('user')
+            .get(
+                token=token_value,
+                user__email__iexact=email
+            )
+        )
     except PasswordResetToken.DoesNotExist:
-        return Response({'detail': 'Invalid token.'}, status=400)
+        return Response(
+            {
+                'token': [
+                    'Invalid password reset token.'
+                ]
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Check token validity
+    if not reset.is_valid():
+        return Response(
+            {
+                'token': [
+                    'This password reset link has expired or has already been used.'
+                ]
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Use Django's password validators
+    try:
+        validate_password(password1, user=reset.user)
+    except ValidationError as exc:
+        return Response(
+            {
+                'new_password1': list(exc.messages)
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Change password
+    reset.user.set_password(password1)
+    reset.user.save(update_fields=['password'])
+
+    # Consume token
+    reset.used = True
+    reset.save(update_fields=['used'])
+
+    return Response(
+        {
+            'detail': 'Password reset successfully.'
+        },
+        status=status.HTTP_200_OK
+    )
 
 
 @api_view(['POST'])

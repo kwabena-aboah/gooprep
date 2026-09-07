@@ -56,7 +56,7 @@ class RegisterView(generics.CreateAPIView):
     @staticmethod
     def _send_verification_email(user):
         token = EmailVerificationToken.objects.create(user=user, token=uuid.uuid4().hex)
-        frontend_url = settings.FRONTEND_URL or 'http://localhost:5173'
+        frontend_url = settings.FRONTEND_URL
         verify_url = f'{frontend_url}/verify-email?token={token.token}'
         try:
             send_mail(

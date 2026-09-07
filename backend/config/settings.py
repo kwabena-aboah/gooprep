@@ -219,7 +219,10 @@ EMAIL_USE_TLS = config(
     default=True,
     cast=bool
 )
-FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:5173")
+FRONTEND_URL = config(
+    "FRONTEND_URL",
+    default="noreply@gooprep.vercel.app" if not DEBUG else "http://localhost:5173",
+).strip().rstrip("/") or ("https://gooprep.com" if not DEBUG else "http://localhost:5173")
 PAYSTACK_PUBLIC_KEY = config("PAYSTACK_PUBLIC_KEY", default="")
 PAYSTACK_SECRET_KEY = config("PAYSTACK_SECRET_KEY", default="")
 BBB_URL = config("BBB_URL", default="").strip()

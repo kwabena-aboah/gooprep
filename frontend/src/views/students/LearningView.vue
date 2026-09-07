@@ -180,7 +180,11 @@ onMounted(async () => {
       apiGet('/tutors/favourites/'),
       apiGet('/ai/progress/'),
     ])
-    const completed = (lessonsResponse.data?.results || []).filter(lesson => lesson.status === 'completed')
+    const lessonData = lessonsResponse.data
+    const lessonItems = Array.isArray(lessonData)
+      ? lessonData
+      : (lessonData?.results || [])
+    const completed = lessonItems.filter(lesson => lesson.status === 'completed')
     stats.value = {
       completed: completed.length,
       hours: (completed.reduce((sum, lesson) => sum + (lesson.duration_minutes || 0), 0) / 60).toFixed(1),

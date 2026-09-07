@@ -240,7 +240,8 @@ GUPPY_API_URL        = config("GUPPY_API_URL", default="https://api.guppymesseng
 GUPPY_APP_ID         = config("GUPPY_APP_ID", default="")
 GUPPY_API_KEY        = config("GUPPY_API_KEY", default="")
 GUPPY_WEBHOOK_SECRET = config("GUPPY_WEBHOOK_SECRET", default="")
-OPENAI_API_KEY       = config("OPENAI_API_KEY", default="")
+OPENAI_API_KEY       = config("OPENAI_API_KEY", default="").strip()
+OPENAI_MODEL         = config("OPENAI_MODEL", default="gpt-4o-mini").strip()
 WHATSAPP_API_TOKEN   = config("WHATSAPP_API_TOKEN", default="")
 WHATSAPP_PHONE_ID    = config("WHATSAPP_PHONE_ID", default="")
 # Commission is a fraction of the gross lesson amount retained by the platform.

@@ -67,7 +67,7 @@ class TutorDocument(models.Model):
 
 class UserDocument(models.Model):
     TYPES = [
-        ('ghana_passport_card', 'Ghana passport card'),
+        ('ghana_passport_card', 'ECOWAS identity card'),
         ('voters_id_card', "Voter's ID card"),
         ('drivers_license', "Driver's license"),
         ('other_id', 'Other identity document'),

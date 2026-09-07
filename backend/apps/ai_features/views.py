@@ -6,36 +6,54 @@ from .models import AIConversation, StudentProgress
 import logging
 logger = logging.getLogger(__name__)
 
-@api_view(['POST'])
+@api_view(['GET', 'POST'])
 @permission_classes([permissions.IsAuthenticated])
 def ai_chat(request):
-    message = request.data.get('message','').strip()
-    if not message: return Response({'error':'Message required.'}, status=400)
+    conv = AIConversation.objects.filter(user=request.user).first()
+    if request.method == 'GET':
+        return Response({'messages': conv.messages if conv else []})
+
+    message = str(request.data.get('message', '')).strip()
+    if not message:
+        return Response({'error': 'Message required.'}, status=400)
+
     from django.conf import settings
-    api_key = settings.OPENAI_API_KEY
-    if not api_key: return Response({'response':'AI assistant is currently unavailable. Please contact support.'})
-    # Get or create conversation history
+    api_key = str(getattr(settings, 'OPENAI_API_KEY', '') or '').strip()
+    if not api_key:
+        return Response({'error': 'AI assistant is not configured.'}, status=503)
+
     conv, _ = AIConversation.objects.get_or_create(user=request.user)
-    history  = conv.messages[-10:]  # keep last 10 messages for context
-    history.append({'role':'user','content':message})
+    history = [
+        item for item in (conv.messages or [])[-10:]
+        if isinstance(item, dict) and item.get('role') in {'user', 'assistant'}
+    ]
+    history.append({'role': 'user', 'content': message})
     try:
         import openai
         client = openai.OpenAI(api_key=api_key)
-        resp = client.chat.completions.create(
-            model='gpt-3.5-turbo',
+        response = client.chat.completions.create(
+            model=getattr(settings, 'OPENAI_MODEL', 'gpt-4o-mini'),
             messages=[
-                {'role':'system','content':"You are a helpful study assistant for Gooprep, Ghana's tutoring platform. Help students with homework, exam prep, and learning questions. Be concise and educational. Use Ghana context when relevant."},
-                *history
-            ], max_tokens=600
+                {'role': 'system', 'content': (
+                    "You are a helpful study assistant for Gooprep, Ghana's tutoring "
+                    "platform. Help with homework, exam preparation, and learning "
+                    "questions. Be concise, educational, and use Ghana context when relevant."
+                )},
+                *history,
+            ],
+            max_tokens=600,
         )
-        ai_reply = resp.choices[0].message.content
-        history.append({'role':'assistant','content':ai_reply})
-        conv.messages = history[-20:]  # keep last 20
-        conv.save(update_fields=['messages','updated_at'])
-        return Response({'response':ai_reply})
-    except Exception as e:
-        logger.warning(f'AI chat error: {e}')
-        return Response({'response':'Sorry, I could not process that right now. Please try again shortly.'})
+        ai_reply = (response.choices[0].message.content or '').strip()
+        if not ai_reply:
+            raise RuntimeError('OpenAI returned an empty response.')
+    except Exception:
+        logger.exception('AI chat request failed for user %s', request.user.pk)
+        return Response({'error': 'The AI assistant is temporarily unavailable.'}, status=503)
+
+    history.append({'role': 'assistant', 'content': ai_reply})
+    conv.messages = history[-20:]
+    conv.save(update_fields=['messages', 'updated_at'])
+    return Response({'response': ai_reply, 'messages': conv.messages})
 
 @api_view(['DELETE'])
 @permission_classes([permissions.IsAuthenticated])
@@ -55,19 +73,21 @@ def student_progress(request):
         status='completed',
         subject__isnull=False,
     ).values('subject_id', 'subject__name').annotate(lessons_completed=Count('id'))
-    stored = {
-        progress.subject_id: progress
-        for progress in StudentProgress.objects.filter(student=request.user)
-    }
     results = []
     for row in completed:
-        progress = stored.get(row['subject_id'])
+        progress, _ = StudentProgress.objects.get_or_create(
+            student=request.user,
+            subject_id=row['subject_id'],
+        )
+        if progress.lessons_completed != row['lessons_completed']:
+            progress.lessons_completed = row['lessons_completed']
+            progress.save(update_fields=['lessons_completed', 'last_updated'])
         results.append({
             'subject_id': row['subject_id'],
             'subject_name': row['subject__name'],
-            'score_before': progress.score_before if progress else 0,
-            'score_after': progress.score_after if progress else 0,
-            'lessons_completed': row['lessons_completed'],
+            'score_before': progress.score_before,
+            'score_after': progress.score_after,
+            'lessons_completed': progress.lessons_completed,
         })
     return Response({'results': results})
 
@@ -87,7 +107,7 @@ def generate_flashcards(request):
         import openai
         client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
         response = client.chat.completions.create(
-            model='gpt-3.5-turbo',
+            model=getattr(settings, 'OPENAI_MODEL', 'gpt-4o-mini'),
             messages=[{'role': 'user', 'content': (
                 f'Generate 5 concise flashcards for {subject or "General"}: {topic}. '
                 'Return only JSON array objects with q and a keys. No markdown.'
@@ -112,7 +132,8 @@ def generate_quiz(request):
     try:
         import openai, json
         client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
-        resp = client.chat.completions.create(model='gpt-3.5-turbo',
+        resp = client.chat.completions.create(
+            model=getattr(settings, 'OPENAI_MODEL', 'gpt-4o-mini'),
             messages=[{'role':'user','content':f'Generate 5 multiple-choice questions for {subject or "General"}: {topic}. Return only a JSON array with "question", "options" (array of 4), "answer" (index 0-3). No markdown.'}],
             max_tokens=600)
         questions = json.loads(resp.choices[0].message.content)

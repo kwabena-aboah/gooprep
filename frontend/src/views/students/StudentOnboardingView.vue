@@ -29,7 +29,7 @@ const notifStore = useNotifStore()
 const saving = ref(false)
 const institutions = GHANA_INSTITUTIONS
 const identityOptions = [
-  { value: 'ghana_passport_card', label: 'Ghana passport card' },
+  { value: 'ghana_passport_card', label: 'ECOWAS identity card' },
   { value: 'voters_id_card', label: "Voter's ID card" },
   { value: 'drivers_license', label: "Driver's license" },
   { value: 'other_id', label: 'Other identity document' },

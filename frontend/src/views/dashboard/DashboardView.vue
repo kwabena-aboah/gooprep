@@ -144,9 +144,10 @@ const loading     = ref(true)
 const upcoming    = ref([])
 const badges      = ref([])
 const stats       = ref({ total_lessons:0, lessons_month:0, total_hours:'0', avg_session:0 })
-const aiQ         = ref('')
-const aiReply     = ref('')
-const aiLoading   = ref(false)
+const aiQ           = ref('')
+const aiReply       = ref('')
+const aiConversation = ref([])
+const aiLoading     = ref(false)
 
 const greeting = computed(() => {
   const h = new Date().getHours()
@@ -170,18 +171,31 @@ const quickLinks = computed(() => auth.isTutor
 
 async function askAI() {
   if (!aiQ.value.trim()) return
-  aiLoading.value = true; aiReply.value = ''
+  aiLoading.value = true
+  aiReply.value = ''
   try {
     const { data } = await apiPost('/ai/chat/', { message: aiQ.value })
     aiReply.value = data.response || 'No response.'
+    aiConversation.value = data.messages || [
+      ...aiConversation.value,
+      { role: 'user', content: aiQ.value },
+      { role: 'assistant', content: aiReply.value },
+    ]
     aiQ.value = ''
-  } catch { aiReply.value = 'AI unavailable right now.' }
-  finally { aiLoading.value = false }
+  } catch (error) {
+    aiReply.value = error.response?.data?.error || 'AI unavailable right now.'
+  } finally {
+    aiLoading.value = false
+  }
 }
 
 onMounted(async () => {
   try {
     await auth.fetchMe()
+    try {
+      const { data } = await apiGet('/ai/chat/')
+      aiConversation.value = Array.isArray(data.messages) ? data.messages : []
+    } catch {}
     const activity = await apiPost('/gamification/activity/')
     if (activity.data) {
       auth.user.total_points = activity.data.total

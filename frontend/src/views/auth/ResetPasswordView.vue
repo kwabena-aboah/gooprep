@@ -59,34 +59,119 @@ import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { apiPost } from '@/utils/api'
 
-const route  = useRoute()
-const pw     = ref('')
-const pw2    = ref('')
-const showPw = ref(false)
-const step   = ref(1)
-const loading = ref(false)
-const error  = ref('')
+const route = useRoute()
 
+const pw = ref('')
+const pw2 = ref('')
+const showPw = ref(false)
+const step = ref(1)
+const loading = ref(false)
+const error = ref('')
+
+// Get the email and token directly from the reset URL.
+//
+// Expected URL:
+// /reset-password?email=user@example.com&token=xxxxxxxx
+const email = computed(() => {
+  return String(route.query.email || '').trim().toLowerCase()
+})
+
+const token = computed(() => {
+  return String(route.query.token || '').trim()
+})
+
+// Password strength
 const strength = computed(() => {
-  const p = pw.value; if (!p) return 0
+  const p = pw.value
+
+  if (!p) return 0
+
   let s = 0
-  if (p.length >= 8) s++; if (/[A-Z]/.test(p)) s++
-  if (/[0-9]/.test(p)) s++; if (/[^A-Za-z0-9]/.test(p)) s++
+
+  if (p.length >= 8) s++
+  if (/[A-Z]/.test(p)) s++
+  if (/[0-9]/.test(p)) s++
+  if (/[^A-Za-z0-9]/.test(p)) s++
+
   return Math.max(1, s)
 })
-const colors = ['#ef4444','#f59e0b','#3b82f6','#10b981']
-const color  = computed(() => colors[strength.value - 1])
+
+const colors = ['#ef4444', '#f59e0b', '#3b82f6', '#10b981']
+
+const color = computed(() => {
+  return colors[strength.value - 1] || colors[0]
+})
 
 async function submit() {
-  loading.value = true; error.value = ''
+  error.value = ''
+
+  // Make sure the reset link contains everything required.
+  if (!email.value) {
+    error.value = 'This password reset link is missing the email address.'
+    return
+  }
+
+  if (!token.value) {
+    error.value = 'This password reset link is missing the reset token.'
+    return
+  }
+
+  // Validate passwords
+  if (!pw.value) {
+    error.value = 'Please enter a new password.'
+    return
+  }
+
+  if (pw.value.length < 8) {
+    error.value = 'Password must be at least 8 characters long.'
+    return
+  }
+
+  if (pw.value !== pw2.value) {
+    error.value = 'Passwords do not match.'
+    return
+  }
+
+  loading.value = true
+
   try {
     await apiPost('/auth/password/reset/confirm/', {
-      uid: route.query.uid, token: route.query.token,
-      new_password1: pw.value, new_password2: pw2.value,
+      email: email.value,
+      token: token.value,
+      new_password1: pw.value,
+      new_password2: pw2.value,
     })
+
     step.value = 2
+
   } catch (e) {
-    error.value = Object.values(e.response?.data || {}).flat().join(' ') || 'Invalid or expired link.'
-  } finally { loading.value = false }
+    const data = e.response?.data || {}
+
+    // Handle DRF validation responses
+    if (data.new_password1) {
+      error.value = Array.isArray(data.new_password1)
+        ? data.new_password1.join(' ')
+        : data.new_password1
+    } else if (data.new_password2) {
+      error.value = Array.isArray(data.new_password2)
+        ? data.new_password2.join(' ')
+        : data.new_password2
+    } else if (data.email) {
+      error.value = Array.isArray(data.email)
+        ? data.email.join(' ')
+        : data.email
+    } else if (data.token) {
+      error.value = Array.isArray(data.token)
+        ? data.token.join(' ')
+        : data.token
+    } else if (data.detail) {
+      error.value = data.detail
+    } else {
+      error.value = 'Invalid or expired password reset link.'
+    }
+
+  } finally {
+    loading.value = false
+  }
 }
 </script>

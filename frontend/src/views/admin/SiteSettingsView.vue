@@ -143,8 +143,16 @@ async function save() {
 async function testBBB() {
   testingBBB.value = true; bbbResult.value = null
   try {
-    const { data } = await apiPost('/settings/bbb/test/', { url: s.value.bbb_url, secret: s.value.bbb_key || s.value.bbb_secret })
-    bbbResult.value = { ok: data.success, msg: data.success ? 'All BBB APIs connected ✓' : `${data.message || 'BBB test failed'} Meetings: ${data.details?.meetings || 'not tested'}. Recordings: ${data.details?.recordings || 'not tested'}` }
+    const { data } = await apiPost('/settings/bbb/test/', { url: s.value.bbb_url, key: s.value.bbb_key })
+    const details = data.details || {}
+    bbbResult.value = {
+      ok: data.success,
+      msg: data.success
+        ? 'All BBB APIs connected ✓'
+        : `${data.message || data.error || 'BBB test failed'} ` +
+          `Meetings: ${details.meetings || (data.meetings_ok ? 'OK' : 'failed')}. ` +
+          `Recordings: ${details.recordings || (data.recordings_ok ? 'OK' : 'failed')}`
+    }
     health.value.find(h=>h.label==='BBB').ok = data.success
     health.value.find(h=>h.label==='BBB').value = data.success ? 'Online' : 'Offline'
   } catch { bbbResult.value = { ok: false, msg: 'Connection failed' } }
@@ -163,8 +171,7 @@ onMounted(async () => {
   try {
     const { data } = await apiGet('/settings/')
     Object.assign(s.value, data)
-    // The API historically calls this field bbb_secret; the form uses bbb_key.
-    if (!s.value.bbb_key) s.value.bbb_key = s.value.bbb_secret || ''
+    if (!s.value.bbb_key) s.value.bbb_key = ''
     await checkHealth()
   } catch {} finally { loading.value = false }
 })

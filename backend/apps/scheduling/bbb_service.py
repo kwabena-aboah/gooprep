@@ -48,11 +48,7 @@ class BBBService:
             or ""
         ).strip()
 
-        self.secret = (
-            getattr(settings, "BBB_KEY", "")
-            or getattr(settings, "BBB_SECRET", "")
-            or ""
-        ).strip()
+        self.secret = getattr(settings, "BBB_KEY", "").strip()
 
         self.client: Optional[BigBlueButtonClient] = None
 
@@ -842,8 +838,9 @@ class BBBService:
             return False
 
         try:
-            response = self.get_api_version()
-
+            # The empty connection probe can succeed even when the security
+            # salt is wrong. Validate a signed operational API instead.
+            response = self.get_meetings()
             return self._success(response)
 
         except Exception as exc:

@@ -1932,6 +1932,7 @@ class BBBHealthView(APIView):
                     "configured": True,
                     "healthy": healthy,
                     "bbb_url": bbb.base_url,
+                    "detail": "Signed getMeetings succeeded." if healthy else "Signed getMeetings failed; check BBB_KEY.",
                 },
                 status=(
                     status.HTTP_200_OK

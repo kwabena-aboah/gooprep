@@ -227,9 +227,6 @@ PAYSTACK_PUBLIC_KEY = config("PAYSTACK_PUBLIC_KEY", default="")
 PAYSTACK_SECRET_KEY = config("PAYSTACK_SECRET_KEY", default="")
 BBB_URL = config("BBB_URL", default="").strip()
 BBB_KEY = config("BBB_KEY", default="").strip()
-BBB_SECRET = config("BBB_SECRET", default="").strip()
-if not BBB_KEY:
-    BBB_KEY = BBB_SECRET
 BBB_LOGO_URL = config("BBB_LOGO_URL", default="").strip()
 
 BBB_MAX_PARTICIPANTS = int(

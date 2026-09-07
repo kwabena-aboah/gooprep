@@ -99,7 +99,6 @@ class SiteSettingsView(APIView):
             dj.BBB_URL = s.bbb_url
         if s.bbb_secret:
             dj.BBB_KEY = s.bbb_secret
-            dj.BBB_SECRET = s.bbb_secret
         if s.guppy_api_key:  dj.GUPPY_API_KEY = s.guppy_api_key
         if s.guppy_app_id:   dj.GUPPY_APP_ID  = s.guppy_app_id
         if s.guppy_webhook_secret: dj.GUPPY_WEBHOOK_SECRET = s.guppy_webhook_secret
@@ -134,11 +133,7 @@ class BBBTestView(APIView):
     def post(self, request):
         from sage_bbb.services.client import BigBlueButtonClient
         url = (request.data.get('url') or getattr(settings, 'BBB_URL', '')).strip()
-        secret = (
-            request.data.get('secret')
-            or getattr(settings, 'BBB_KEY', '')
-            or getattr(settings, 'BBB_SECRET', '')
-        ).strip()
+        secret = (request.data.get('key') or getattr(settings, 'BBB_KEY', '')).strip()
         if not url or not secret:
             return Response({'success': False, 'error': 'BBB URL and key are required.'}, status=400)
         try:
@@ -148,12 +143,16 @@ class BBBTestView(APIView):
             connection_ok = str(connection_data.get('returncode', connection_data.get('returnCode', ''))).upper() in {'SUCCESS', 'OK', 'TRUE'}
 
             meetings = client.meetings.get_meetings()
-            meetings_ok = str(meetings.get('returncode', '')).upper() == 'SUCCESS'
+            meetings_ok = str(
+                meetings.get('returncode', meetings.get('returnCode', ''))
+            ).upper() == 'SUCCESS'
 
             # Use a harmless nonexistent ID: this validates request signing
             # without creating a room or touching an existing recording.
             recordings = client.recordings.get_recordings('gooprep-connection-probe')
-            recordings_ok = str(recordings.get('returncode', '')).upper() == 'SUCCESS'
+            recordings_ok = str(
+                recordings.get('returncode', recordings.get('returnCode', ''))
+            ).upper() == 'SUCCESS'
 
             success = connection_ok and meetings_ok and recordings_ok
             return Response({
@@ -161,7 +160,7 @@ class BBBTestView(APIView):
                 'connection_ok': connection_ok,
                 'meetings_ok': meetings_ok,
                 'recordings_ok': recordings_ok,
-                'message': '' if success else 'BBB API authentication failed for one or more operational calls.',
+                'message': '' if success else 'BBB is reachable, but the security salt/key was rejected by one or more signed API calls.',
                 'details': {
                     'endpoint': getattr(client.url_builder, 'bbb_server_base_url', url),
                     'meetings': meetings.get('message', ''),
